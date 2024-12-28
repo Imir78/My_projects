@@ -1,0 +1,1552 @@
+---
+title: "Statistical Modelling of Operational Risk Losses (Value-at-Risk computation) using R Programming Language (version 1.0)"
+author: "Imir Osmanov"
+date: "2024-12-27"
+output: pdf_document
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+Operational Risk Value-at-Risk (VaR) computation using Monte-Carlo
+simulation (100 000 samples) of Poisson Distribution to generate
+frequency of risks and Weibull and Lognormal Distributions to generate
+amounts of losses (impact/severity). The data for operational risk
+losses is downloaded from "OpVar" package for R and is used for
+computation within this notebook.
+
+# Executive Summary
+
+## Purpose:
+
+The purpose of this analysis is to Monte-Carlo simulations (100 000
+samples) by generation of different distributions to compute Operational
+Risk Value-at-Risk (VaR) with statistical estimations of best fit. The
+scope is methodology for Operational Risk Value-at-Risk (VaR)
+computation.
+
+## Main findings:
+
+Computation of Operational Risk Value-at-Risk (VaR) given one approach
+for generation of frequency (number) of Operational Risk Events using
+Poisson Distribution for types of Operational Risks and 2 different
+approaches for generation of amounts (impact/severity) of Operational
+Risk Events: Weibull and Log-Normal Distributions for different types of
+Operational Risks based on results of statistical estimations showed
+following results: 
+'1. Expected Loss (EL) or mathematical expectation is
+USD 68913.24 taken as mean value and 63186.06 taken as median value are
+the same for all confidence intervals (75%, 95%, 99% and 99.9%).' 
+'2. Monthly Operational Risk Value-at-Risk showed the following results: -
+Monthly Value-at-Risk (VaR) with 75% confidence level is USD 85384.03
+and Unexpected Loss (UL) is USD 16470.79 (mean) and USD 22197.96
+(median).'
+'- Monthly Value-at-Risk (VaR) with 95% confidence level is USD
+128643.69 and Unexpected Loss (UL) is USD 59730.45 (mean) and USD
+65457.63 (median).' 
+'- Monthly Value-at-Risk (VaR) with 99% confidence
+level is USD 170304.83 and Unexpected Loss (UL) is USD 1101391.14 (mean)
+and USD 107118.32 (median).'
+'- Monthly Value-at-Risk (VaR) with 99.9%
+confidence level is USD 235723.77 and Unexpected Loss (UL) is USD
+166810.53 (mean) and USD 172537.71 (median).'
+'3. Yearly Operational Risk Value-at-Risk is calculated by multiplication (product) of monthly
+Value-at-Risk by square root of 12 and showed the following results:'
+'- Yearly Value-at-Risk (VaR) with 75% confidence level is USD 295778.94
+and Unexpected Loss (UL) is USD 57066.48 (mean) and USD 76896.00
+(median).'
+'- Yearly Value-at-Risk (VaR) with 95% confidence level is USD
+445634.81 and Unexpected Loss (UL) is USD 206912.36 (mean) and USD
+226751.88 (median).'
+'- Yearly Value-at-Risk (VaR) with 99% confidence
+level is USD 589951.68 and Unexpected Loss (UL) is USD 351229.22 (mean)
+and USD 371068.74 (median).'
+'- Yearly Value-at-Risk (VaR) with 99.9%
+confidence level is USD 816571.10 and Unexpected Loss (UL) is USD
+577848.64 (mean) and USD 597688.16 (median).'
+As all distributions of
+Operational Risks are skewed to the left and show many outliers it is
+recommended to take Median values for Expected Loss instead of Mean
+values.
+
+## Methodology:
+
+The methodology for statistical modelling of Operational Risk Losses is
+based on Monte-Carlo simulation (100000 samples) to generate
+frequency/number of Operational Risk events using Poisson Distribution
+and Weibull and Log-Normal Distribution to generate amounts of
+Operational Risk Losses (impact/severity) with R programming language.
+
+## Recommendations:
+
+It is recommended to further review different distributions available
+with R packages and apply them for different Operational Risk Losses to
+make final conclusion on what approach to use and apply for computation
+of Operational Risk Value-at-Risk (VaR) required for calculation of
+Economic Capital. It is also recommended to carry out numerous of
+iterations for computations of Value-at-Risk (VaR) as well as using
+statistical bootstraping technique, for example, about 10 000 iterations
+(samples) for computation of Value-at-Risk (VaR) and making final
+decision.
+
+## Next Steps:
+
+The next steps and areas for further development of methodology are: 1.
+To carry out further analysis using applicable statistical distributions
+(Normal (Gaussian), Paretto, Exponential, Beta). 2. To carry out
+generation of tails of distribution for extreme events using Extreme
+Value Theory using available distributions (Gumbel, Frechet) and account
+them in Value-at-Risk (VaR) computation. 3. To apply adjustment of
+Operational Risk Losses to annual inflation rate. 4. To apply
+bootstraping technique for iterations of Value-at-Risk (VaR) computation
+and calculation of confidence intervals. 5. To apply modelling of
+recoveries of Operational Risk Losses from insurance. 6. To calculate
+confidence intervals using bootstrapping technique. 7. To apply
+dependencies between different types of Operational Risk Losses using
+different Copulas.
+
+```{r}
+# Importing required R packages (libraries):
+library(extraDistr)
+library(readxl)
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(fitdistrplus)
+library(nortest)
+library(corrplot)
+```
+## Downloading required Operational Risk Loss Data:
+
+### Operational Risk Type 1
+
+```{r}
+# Downloading necessary files
+# Operational losses type 1
+or_type1 <- read_excel("C:\\Users\\user\\Documents\\Imir\\My Data Analysis Projects\\Data\\file1.xlsx")
+or_type1 <- as.data.frame(or_type1)
+head(or_type1)
+tail(or_type1)
+```
+
+#### Exploratory Data Analysis of Operational Risk Type 1
+
+```{r}
+# Exploratory data analysis
+summary(or_type1)
+glimpse(or_type1)
+str(or_type1)
+```
+
+**Findings:** There are: 1965 observations for Operational Risk Type 1.
+All columns have proper data types. Minimum value is USD 5, mean is USD
+1017, median USD 760 and maximum is USD 6382.
+
+#### Checking for missing and duplicated values
+
+```{r}
+# Checking for missing values
+cat("\nMissing values per column:\n")
+missing_values <- colSums(is.na(or_type1))
+print(missing_values)
+
+# Checking for duplicated rows
+cat("\nDuplicated rows:\n")
+duplicated_rows <- or_type1[duplicated(or_type1), ]
+if (nrow(duplicated_rows) > 0) {
+  print(duplicated_rows)
+} else {
+  cat("No duplicated rows found.\n")
+}
+```
+
+**Findings:** There are no null and duplicated values in Operational
+Risk Type 1.
+
+#### Visualization of Operational Risk Type 1
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Histogram of distribution of Operational Risk Losses type 1
+ggplot(data = or_type1, mapping = aes(x = Loss)) +
+  geom_histogram(binwidth = 50, 
+                 fill = "blue", color = "black", alpha = 0.7) +
+  labs(title = "Histogram of Operational Risk Type 1", 
+       x = "Loss amount (USD)", y = "Frequency") +
+  theme_bw()
+```
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Boxplot of distribution of Operational Risk Losses type 1
+ggplot(data = or_type1, mapping = aes(x = Loss)) +
+  geom_boxplot(fill = "blue", 
+               color = "black", alpha = 0.7) +
+  labs(title = "Boxplot of Operational Risk Type 1", 
+       x = "Loss amount (USD)") +
+  theme_bw()
+```
+
+**Findings:** The histogram and boxplot show presence of outliers, which
+are also confirmed by significant difference in mean and median.
+
+### Operational Risk Type 2
+
+```{r}
+# Downloading necessary files
+# Operational losses type 2
+or_type2 <- read_excel("C:\\Users\\user\\Documents\\Imir\\My Data Analysis Projects\\Data\\file2.xlsx")
+head(or_type2)
+tail(or_type2)
+```
+
+#### Exploratory Data Analysis of Operational Risk Type 2
+
+```{r}
+# Exploratory data analysis
+summary(or_type2)
+glimpse(or_type2)
+str(or_type2)
+```
+
+**Findings:** There are: 2025 observations for Operational Risk Type 2.
+All columns have proper data types. Minimum value is USD 3, mean is USD
+1139, median USD 850 and maximum is USD 6213.
+
+#### Checking for missing and duplicated values
+
+```{r}
+# Checking for missing values
+cat("\nMissing values per column:\n")
+missing_values <- colSums(is.na(or_type2))
+print(missing_values)
+
+# Checking for duplicated rows
+cat("\nDuplicated rows:\n")
+duplicated_rows <- or_type2[duplicated(or_type2), ]
+if (nrow(duplicated_rows) > 0) {
+  print(duplicated_rows)
+} else {
+  cat("No duplicated rows found.\n")
+}
+```
+
+**Findings:** There are no null and duplicated values in Operational
+Risk Type 2.
+
+#### Visualization of Operational Risk Type 2
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Histogram of distribution of Operational Risk Losses type 2
+ggplot(data = or_type2, mapping = aes(x = Loss)) +
+  geom_histogram(binwidth = 50, fill = "red", 
+                 color = "black", alpha = 0.7) +
+  labs(title = "Histogram of Operational Risk Type 2", 
+       x = "Loss amount (USD)", y = "Frequency") +
+  theme_bw()
+```
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Boxplot of distribution of Operational Risk Losses type 2
+ggplot(data = or_type2, mapping = aes(x = Loss)) +
+  geom_boxplot(fill = "red", 
+               color = "black", alpha = 0.7) +
+  labs(title = "Boxplot of Operational Risk Type 2", 
+       x = "Loss amount (USD)") +
+  theme_bw()
+```
+
+**Findings:** The histogram and boxplot show presence of outliers, which
+are also confirmed by significant difference in mean and median.
+
+### Operational Risk Type 3
+
+```{r}
+# Downloading necessary files
+# Operational losses type 3
+or_type3 <- read_excel("C:\\Users\\user\\Documents\\Imir\\My Data Analysis Projects\\Data\\file3.xlsx")
+head(or_type3)
+tail(or_type3)
+```
+
+#### Exploratory Data Analysis of Operational Risk Type 3
+
+```{r}
+# Exploratory data analysis
+summary(or_type3)
+glimpse(or_type3)
+str(or_type3)
+```
+
+**Findings:** There are: 1995 observations for Operational Risk Type 3.
+All columns have proper data types. Minimum value is USD 48, mean is USD
+1052, median USD 788 and maximum is USD 12092.
+
+#### Checking for missing and duplicated values
+
+```{r}
+# Checking for missing values
+cat("\nMissing values per column:\n")
+missing_values <- colSums(is.na(or_type3))
+print(missing_values)
+
+# Checking for duplicated rows
+cat("\nDuplicated rows:\n")
+duplicated_rows <- or_type3[duplicated(or_type3), ]
+if (nrow(duplicated_rows) > 0) {
+  print(duplicated_rows)
+} else {
+  cat("No duplicated rows found.\n")
+}
+```
+
+**Findings:** There are no null and duplicated values in Operational
+Risk Type 3.
+
+#### Visualization of Operational Risk Type 3
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Histogram of distribution of Operational Risk Losses type 3
+ggplot(data = or_type3, mapping = aes(x = Loss)) +
+  geom_histogram(binwidth = 50, fill = "green", 
+                 color = "black", alpha = 0.7) +
+  labs(title = "Histogram of Operational Risk Type 3", 
+       x = "Loss amount (USD)", y = "Frequency") +
+  theme_bw()
+```
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Boxplot of distribution of Operational Risk Losses type 3
+ggplot(data = or_type3, mapping = aes(x = Loss)) +
+  geom_boxplot(fill = "green", 
+               color = "black", alpha = 0.7) +
+  labs(title = "Boxplot of Operational Risk Type 3", 
+       x = "Loss amount (USD)") +
+  theme_bw()
+```
+
+**Findings:** The histogram and boxplot show presence of outliers, which
+are also confirmed by significant difference in mean and median.
+
+### Operational Risk Type 4
+
+```{r}
+# Downloading necessary files
+# Operational losses type 4
+or_type4 <- read_excel("C:\\Users\\user\\Documents\\Imir\\My Data Analysis Projects\\Data\\file4.xlsx")
+head(or_type4)
+tail(or_type4)
+```
+
+#### Exploratory Data Analysis of Operational Risk Type 4
+
+```{r}
+# Exploratory data analysis
+summary(or_type4)
+glimpse(or_type4)
+str(or_type4)
+```
+
+**Findings:** There are: 1995 observations for Operational Risk Type 4.
+All columns have proper data types. Minimum value is USD 201, mean is
+USD 969.1, median USD 717 and maximum is USD 6215.
+
+#### Checking for missing and duplicated values
+
+```{r}
+# Checking for missing values
+cat("\nMissing values per column:\n")
+missing_values <- colSums(is.na(or_type4))
+print(missing_values)
+
+# Checking for duplicated rows
+cat("\nDuplicated rows:\n")
+duplicated_rows <- or_type4[duplicated(or_type4), ]
+if (nrow(duplicated_rows) > 0) {
+  print(duplicated_rows)
+} else {
+  cat("No duplicated rows found.\n")
+}
+```
+
+**Findings:** There are no null and duplicated values in Operational
+Risk Type 4.
+
+#### Visualization of Operational Risk Type 4
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Histogram of distribution of Operational Risk Losses type 4
+ggplot(data = or_type4, mapping = aes(x = Loss)) +
+  geom_histogram(binwidth = 50, fill = "skyblue", 
+                 color = "black", alpha = 0.7) +
+  labs(title = "Histogram of Operational Risk Type 4", 
+       x = "Loss amount (USD)", y = "Frequency") +
+  theme_bw()
+```
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Boxplot of distribution of Operational Risk Losses type 4
+ggplot(data = or_type4, mapping = aes(x = Loss)) +
+  geom_boxplot(fill = "skyblue", color = "black", alpha = 0.7) +
+  labs(title = "Boxplot of Operational Risk Type 4", 
+       x = "Loss amount (USD)") +
+  theme_bw()
+```
+
+**Findings:** The histogram and boxplot show presence of outliers, which
+are also confirmed by significant difference in mean and median.
+
+### Checking correlations between different types of Operational Risks
+
+```{r}
+# Finding minimal number of rows between each type of Operational Risk
+min_rows <- min(nrow(or_type1), nrow(or_type2), nrow(or_type3), nrow(or_type4))
+
+# Truncating all data frames to minimal number of rows between them
+or_type1_truncated <- or_type1[1:min_rows, ]
+or_type2_truncated  <- or_type2[1:min_rows, ]
+or_type3_truncated  <- or_type3[1:min_rows, ]
+or_type4_truncated  <- or_type4[1:min_rows, ]
+
+# Creating combined the data frame
+combined_or_loss <- cbind(or_type1_truncated$Loss, or_type2_truncated$Loss, 
+                          or_type3_truncated$Loss, or_type4_truncated$Loss)
+str(combined_or_loss)
+```
+
+To create correlation matrix the number of rows should be the same for
+all variables. This is why the data frames were truncated and new data
+frame was created.
+
+#### Calculation Pearson's correlation
+
+```{r}
+# Calculating Pearson's correlation matrix
+or_loss_corr <- cor(combined_or_loss, method = "pearson", 
+                    use = "complete.obs")
+print(or_loss_corr)
+```
+
+```{r}
+# Visualization Pearson's correlation matrix by correlation plot
+col <- colorRampPalette(c("#BB4444", "#EE9988", "#FFFFFF", 
+                          "#77AADD", "#4477AA"))
+corrplot(or_loss_corr, method = "color", col = col(200),
+         type = "upper", order = "hclust",
+         addCoef.col = "black",
+         tl.col = "black", tl.srt = 45,
+)
+```
+
+#### Calculation Kendall's correlation
+
+```{r}
+# Calculating Kendall's correlation matrix
+kendall_corr <- cor(combined_or_loss, method = "kendall", 
+                    use = "complete.obs")
+print(kendall_corr)
+```
+
+```{r}
+# Visualization Kendall's correlation matrix by correlation plot
+col <- colorRampPalette(c("#BB4444", "#EE9988", "#FFFFFF", 
+                          "#77AADD", "#4477AA"))
+corrplot(kendall_corr, method = "color", col = col(200),
+         type = "upper", order = "hclust",
+         addCoef.col = "black", 
+         tl.col = "black", tl.srt = 45,
+         
+)
+```
+
+**Findings:** Different approaches for calculation of correlation
+matrices show significant different results of correlation between
+different types of Operational Risks. The Kendall's correlation is more
+applicable for calculation of correlation matrix between different types
+of Operational Risks as: 1. Does not assume normality in the data. 2.
+Does not assume a linear relationship, and can detect monotonic
+(increasing or decreasing) relationships. 3. More robust to outliers
+compared to Pearson. 4. Provides a measure of the monotonic
+relationship, which includes both linear and non-linear monotonic
+relationships.
+
+## Data preprocessing
+
+### Operational Risk Type 1
+
+Calculation of frequency of Operational Risk Losses per month.
+
+```{r}
+# Calculating frequency of Operational Risk Losses per month
+or_type1_bymonths <- or_type1 %>% 
+  mutate(YearMonth = format(Date, "%Y-%m")) %>%
+  group_by(YearMonth) %>% 
+  summarise(Frequency_Monthly = n())
+print(or_type1_bymonths)
+or_type1_bymonths <- as.data.frame(or_type1_bymonths)
+head(or_type1_bymonths)
+```
+
+### Operational Risk Type 2
+
+Calculation of frequency of Operational Risk Losses per month.
+
+```{r}
+# Calculating frequency of Operational Risk Losses per month
+or_type2_bymonths <- or_type2 %>% 
+  mutate(YearMonth = format(Date, "%Y-%m")) %>%
+  group_by(YearMonth) %>% 
+  summarise(Frequency_Monthly = n())
+print(or_type2_bymonths)
+or_type2_bymonths <- as.data.frame(or_type2_bymonths)
+head(or_type2_bymonths)
+```
+
+### Operational Risk Type 3
+
+Calculation of frequency of Operational Risk Losses per month.
+
+```{r}
+# Calculating frequency of Operational Risk Losses per month
+or_type3_bymonths <- or_type3 %>% 
+  mutate(YearMonth = format(Date, "%Y-%m")) %>%
+  group_by(YearMonth) %>% 
+  summarise(Frequency_Monthly = n())
+print(or_type3_bymonths)
+or_type3_bymonths <- as.data.frame(or_type3_bymonths)
+head(or_type3_bymonths)
+```
+
+### Operational Risk Type 4
+
+Calculation of frequency of Operational Risk Losses per month.
+
+```{r}
+# Calculating frequency of Operational Risk Losses per month
+or_type4_bymonths <- or_type4 %>% 
+  mutate(YearMonth = format(Date, "%Y-%m")) %>%
+  group_by(YearMonth) %>% 
+  summarise(Frequency_Monthly = n())
+print(or_type4_bymonths)
+or_type4_bymonths <- as.data.frame(or_type4_bymonths)
+head(or_type4_bymonths)
+```
+
+## Statistical tests for different distributions
+
+In order to choose appropriate distribution for generation of
+Operational Risk Losses (Impact/Severity) statistical test were applied
+to historical data to choose between (Log-Normal, Normal and Weibull
+distributions) and confirm that data fit chosen distributions.
+
+### Operational Risk Type 1
+
+#### Fitting different distributions
+
+```{r warning=FALSE}
+# Fitting historical data to Log-Normal distribution
+fit_lnorm_type1 <- fitdist(or_type1$Loss, "lnorm")
+summary(fit_lnorm_type1)
+```
+
+```{r warning=FALSE}
+# Fitting historical data to Normal distribution
+fit_norm_type1 <- fitdist(or_type1$Loss, "norm")
+summary(fit_norm_type1)
+```
+
+```{r warning=FALSE}
+# Fitting historical data to Weibull distribution
+fit_weibull_type1 <- fitdist(or_type1$Loss, "weibull")
+summary(fit_weibull_type1)
+```
+
+```{r}
+# Plotting fitted Log-Normal distribution
+par(mfrow = c(2, 2)) 
+plot(fit_lnorm_type1)
+```
+
+```{r}
+# Plotting fitted Normal distribution
+par(mfrow = c(2, 2)) 
+plot(fit_norm_type1)
+```
+
+```{r}
+# Plotting fitted Weibull distribution
+par(mfrow = c(2, 2)) 
+plot(fit_weibull_type1)
+```
+
+#### Statistical tests
+
+**Hypothesis formulation:** The Null hypothesis (H0) the sample comes
+from the reference distribution (Log-Normal/Normal/Weibull
+distribution). The Alternative hypothesis (HA) is that the sample does
+not come from the reference distribution (Log-Normal/Normal/ Weibull
+distribution).
+
+```{r}
+# Removing duplicates from the data
+or_type1_unique <- unique(or_type1$Loss)
+# Kolmogorov-Smirnov test for Log-Normal distribution with unique values
+ks_lnorm_type1 <- ks.test(or_type1_unique, "plnorm", 
+                          meanlog = fit_lnorm_type1$estimate["meanlog"], 
+                          sdlog = fit_lnorm_type1$estimate["sdlog"])
+print(ks_lnorm_type1)
+```
+
+**Findings:** The p-value is very small \< 2.2e-16. A very small p-value
+suggests strong evidence against the Null hypothesis. The Null
+hypothesis is rejected. Data does not follow Log-Normal distribution.
+
+```{r}
+# Kolmogorov-Smirnov test for Normal distribution
+ks_norm_type1 <- ks.test(or_type1_unique, "pnorm", 
+                         mean = fit_norm_type1$estimate["mean"], 
+                         sd = fit_norm_type1$estimate["sd"])
+print(ks_norm_type1)
+```
+
+**Findings:** The p-value is very small \< 2.2e-16. A very small p-value
+suggests strong evidence against the Null hypothesis. The Null
+hypothesis is rejected. Data does not follow Normal distribution.
+
+```{r}
+# Kolmogorov-Smirnov test for Weibull distribution with unique values
+ks_weibull_type1 <- ks.test(or_type1_unique, "pweibull", 
+                            shape = fit_weibull_type1$estimate["shape"], 
+                            scale = fit_weibull_type1$estimate["scale"])
+print(ks_weibull_type1)
+```
+
+**Findings:** The p-value is very small = 1.364e-08. A very small
+p-value suggests strong evidence against the Null hypothesis. The Null
+hypothesis is rejected. Data does not follow Weibull distribution.
+
+```{r}
+# Anderson-Darling test for Log-Normal Distribution
+gof_lnorm_type1 <- gofstat(fit_lnorm_type1)
+print(gof_lnorm_type1)
+```
+
+**Findings:** 0.06072731 is the Kolmogorov-Smirnov statistic for the fit
+of the Log-Normal distribution. The closer this value is to 0, the
+better the fit. A value of 0.0607 suggests a reasonable fit. 2.83467272
+is another measure of Cramer-von Mises statistic. Like the
+Kolmogorov-Smirnov statistic, a smaller value indicates a better fit.
+18.18800823 of Anderson-Darling statistic measures the fit of the
+distribution more sensitively for the tails of the distribution. A
+larger value generally indicates a poor fit, particularly in the tails.
+18.188 is relatively large, suggesting that the Log-Normal distribution
+may not perfectly fit the data, especially in the tails. Akaike's
+Information Criterion (AIC): 31347.48 and Bayesian Information Criterion
+(BIC): 31358.64 will be compared with the same results for different
+distributions to choose better fit.
+
+```{r}
+# Anderson-Darling test for Normal Distribution
+ad_norm_type1 <- ad.test(or_type1$Loss)
+print(ad_norm_type1)
+```
+
+**Findings:** The p-value is very small \< 2.2e-16. A very small p-value
+suggests strong evidence against the Null hypothesis. The Null
+hypothesis is rejected. Data does not follow Normal distribution.
+
+```{r}
+# Anderson-Darling test for Weibull Distribution
+gof_weibull_type1 <- gofstat(fit_weibull_type1)
+print(gof_weibull_type1)
+```
+
+**Findings:** 0.01774904 is the Kolmogorov-Smirnov statistic for the fit
+of the Weibull distribution. The closer this value is to 0, the better
+the fit. A value of 0.0178 suggests a reasonable fit. 0.07766963 is
+another measure of Cramer-von Mises statistic. Like the
+Kolmogorov-Smirnov statistic, a smaller value indicates a better fit.
+0.43203433 of Anderson-Darling statistic measures the fit of the
+distribution more sensitively for the tails of the distribution.
+0.43203433 is very small, suggesting that the Weibull distribution
+better fit the data. Akaike's Information Criterion (AIC): 31077.43 and
+Bayesian Information Criterion (BIC): 31088.59 will be compared with the
+same results for different distributions to choose better fit.
+
+### Operational Risk Type 2
+
+#### Fitting different distributions
+
+```{r warning=FALSE}
+# Fitting historical data to Log-Normal distribution
+fit_lnorm_type2 <- fitdist(or_type2$Loss, "lnorm")
+summary(fit_lnorm_type2)
+```
+
+```{r warning=FALSE}
+# Fitting historical data to Weibull distribution
+fit_norm_type2 <- fitdist(or_type2$Loss, "norm")
+summary(fit_norm_type2)
+```
+
+```{r warning=FALSE}
+# Fitting historical data to Weibull distribution
+fit_weibull_type2 <- fitdist(or_type2$Loss, "weibull")
+summary(fit_weibull_type2)
+```
+
+```{r}
+# Plotting fitted Log-Normal distribution
+par(mfrow = c(2, 2)) 
+plot(fit_lnorm_type2)
+```
+
+```{r}
+# Plotting fitted Normal distribution
+par(mfrow = c(2, 2)) 
+plot(fit_norm_type2)
+```
+
+```{r}
+# Plotting fitted Weibull distribution
+par(mfrow = c(2, 2)) 
+plot(fit_weibull_type2)
+```
+
+#### Statistical tests
+
+**Formulation hypothesis:** The Null hypothesis (H0) the sample comes
+from the reference distribution (Log-Normal/Normal/Weibull
+distribution). The alternative hypothesis (HA) is that the sample does
+not come from the reference distribution (Log-Normal/Normal/ Weibull
+distribution).
+
+```{r}
+# Removing duplicates from the data
+or_type2_unique <- unique(or_type2$Loss)
+# Kolmogorov-Smirnov test for Log-Normal distribution with unique values
+ks_lnorm_type2 <- ks.test(or_type2_unique, "plnorm", 
+                          meanlog = fit_lnorm_type2$estimate["meanlog"], 
+                          sdlog = fit_lnorm_type2$estimate["sdlog"])
+print(ks_lnorm_type2)
+```
+
+**Findings:** The p-value is very small \< 2.2e-16. A very small p-value
+suggests strong evidence against the Null hypothesis. The Null
+hypothesis is rejected. Data does not follow Log-Normal distribution.
+
+```{r}
+# Kolmogorov-Smirnov test for Normal distribution
+ks_norm_type2 <- ks.test(or_type2_unique, "pnorm", mean = fit_norm_type2$estimate["mean"], 
+                         sd = fit_norm_type2$estimate["sd"])
+print(ks_norm_type2)
+```
+
+**Findings:** The p-value is very small \< 2.2e-16. A very small p-value
+suggests strong evidence against the Null hypothesis. The Null
+hypothesis is rejected. Data does not follow Normal distribution.
+
+```{r}
+# Kolmogorov-Smirnov test for Weibull distribution with unique values
+ks_weibull_type2 <- ks.test(or_type2_unique, "pweibull", 
+                            shape = fit_weibull_type2$estimate["shape"], 
+                            scale = fit_weibull_type2$estimate["scale"])
+print(ks_weibull_type2)
+```
+
+**Findings:** The p-value is very small = 9.476e-09. A very small
+p-value suggests strong evidence against the Null hypothesis. The Null
+hypothesis is rejected. Data does not follow Weibull distribution.
+
+```{r}
+# Anderson-Darling test for Log-Normal Distribution
+gof_lnorm_type2 <- gofstat(fit_lnorm_type2)
+print(gof_lnorm_type2)
+```
+
+**Findings:** 0.07259261 is the Kolmogorov-Smirnov statistic for the fit
+of the Log-Normal distribution. The closer this value is to 0, the
+better the fit. A value of 0.0726 suggests a reasonable fit. 3.68527728
+of Cramer-von Mises statistic. Like the Kolmogorov-Smirnov statistic, a
+smaller value indicates a better fit. 22.86977342 of Anderson-Darling
+statistic measures the fit of the distribution more sensitively for the
+tails of the distribution. 22.870 is relatively large, suggesting that
+the Log-Normal distribution may not perfectly fit the data, especially
+in the tails. Akaike's Information Criterion (AIC): 32858.31 and
+Bayesian Information Criterion (BIC): 32869.53 will be compared with the
+same results for different distributions to choose better fit.
+
+```{r}
+# Anderson-Darling test for Normal Distribution
+ad_norm_type2 <- ad.test(or_type2$Loss)
+print(ad_norm_type2)
+```
+
+**Findings:** The p-value is very small \< 2.2e-16. A very small p-value
+suggests strong evidence against the Null hypothesis. The Null
+hypothesis is rejected. Data does not follow Normal distribution.
+
+```{r}
+# Anderson-Darling test for Weibull Distribution
+gof_weibull_type2 <- gofstat(fit_weibull_type2)
+print(gof_weibull_type2)
+```
+
+**Findings:** 0.008778243 is the Kolmogorov-Smirnov statistic for the
+fit of the Weibull distribution. The closer this value is to 0, the
+better the fit. A value of 0.009 suggests a reasonable fit. 0.023320353
+of Cramer-von Mises statistic. Like the Kolmogorov-Smirnov statistic, a
+smaller value indicates a better fit. 0.208354824 of Anderson-Darling
+statistic measures the fit of the distribution more sensitively for the
+tails of the distribution. 0.2084 is very small, suggesting that the
+Weibull distribution better fit the data. Akaike's Information Criterion
+(AIC): 32511.32 and Bayesian Information Criterion (BIC): 32522.55 will
+be compared with the same results for different distributions to choose
+better fit.
+
+### Operational Risk Type 3
+
+#### Fitting different distributions
+
+```{r warning=FALSE}
+# Fitting historical data to Log-Normal distribution
+fit_lnorm_type3 <- fitdist(or_type3$Loss, "lnorm")
+summary(fit_lnorm_type3)
+```
+
+```{r warning=FALSE}
+# Fitting historical data to Normal distribution
+fit_norm_type3 <- fitdist(or_type3$Loss, "norm")
+summary(fit_norm_type3)
+```
+
+```{r warning=FALSE}
+# Fitting historical data to Weibull distribution
+fit_weibull_type3 <- fitdist(or_type3$Loss, "weibull")
+summary(fit_weibull_type3)
+```
+
+```{r}
+# Plotting fitted Log-Normal distribution
+par(mfrow = c(2, 2)) 
+plot(fit_lnorm_type3)
+```
+
+```{r}
+# Plotting fitted Normal distribution
+par(mfrow = c(2, 2)) 
+plot(fit_norm_type3)
+```
+
+```{r}
+# Plotting fitted Weibull distribution
+par(mfrow = c(2, 2)) 
+plot(fit_weibull_type3)
+```
+
+#### Statistical tests
+
+**Formulation hypothesis:** The Null hypothesis (H0) the sample comes
+from the reference distribution (Log-Normal/Normal/Weibull
+distribution). The Alternative hypothesis (HA) is that the sample does
+not come from the reference distribution (Log-Normal/Normal/ Weibull
+distribution).
+
+```{r}
+# Removing duplicates from the data
+or_type3_unique <- unique(or_type3$Loss)
+# Kolmogorov-Smirnov test for Log-Normal distribution with unique values
+ks_lnorm_type3 <- ks.test(or_type3_unique, "plnorm", 
+                          meanlog = fit_lnorm_type3$estimate["meanlog"], 
+                          sdlog = fit_lnorm_type3$estimate["sdlog"])
+print(ks_lnorm_type3)
+```
+
+**Findings:** The p-value is very small = 2.203e-14. A very small
+p-value suggests strong evidence against the Null hypothesis. The Null
+hypothesis is rejected. Data does not follow Log-Normal distribution.
+
+```{r}
+# Kolmogorov-Smirnov test for Normal distribution
+ks_norm_type3 <- ks.test(or_type3_unique, "pnorm", 
+                         mean = fit_norm_type3$estimate["mean"], 
+                         sd = fit_norm_type3$estimate["sd"])
+print(ks_norm_type3)
+```
+
+**Findings:** The p-value is very small \< 2.2e-16. A very small p-value
+suggests strong evidence against the Null hypothesis. The Null
+hypothesis is rejected. Data does not follow Normal distribution.
+
+```{r}
+# Kolmogorov-Smirnov test for Weibull distribution with unique values
+ks_weibull_type3 <- ks.test(or_type3_unique, "pweibull", 
+                            shape = fit_weibull_type3$estimate["shape"], 
+                            scale = fit_weibull_type3$estimate["scale"])
+print(ks_weibull_type3)
+```
+
+**Findings:** The p-value is very small = 6.622e-05. A very small
+p-value suggests strong evidence against the Null hypothesis. The Null
+hypothesis is rejected. Data does not follow Weibull distribution.
+
+```{r}
+# Anderson-Darling test for Log-Normal Distribution
+gof_lnorm_type3 <- gofstat(fit_lnorm_type3)
+print(gof_lnorm_type3)
+```
+
+**Findings:** 0.01219649 is the Kolmogorov-Smirnov statistic for the fit
+of the Log-Normal distribution. The closer this value is to 0, the
+better the fit. A value of 0.0122 suggests a reasonable fit. 0.04955385
+of Cramer-von Mises statistic. Like the Kolmogorov-Smirnov statistic, a
+smaller value indicates a better fit. 0.27108422 of Anderson-Darling
+statistic measures the fit of the distribution more sensitively for the
+tails of the distribution. 0.2711 is very small value, suggesting that
+the Log-Normal distribution may fit the data. Akaike's Information
+Criterion (AIC): 31180.70 and Bayesian Information Criterion (BIC):
+31191.89 will be compared with the same results for different
+distributions to choose better fit.
+
+```{r}
+# Anderson-Darling test for Normal Distribution
+ad_norm_type3 <- ad.test(or_type3$Loss)
+print(ad_norm_type3)
+```
+
+**Findings:** The p-value is very small \< 2.2e-16. A very small p-value
+suggests strong evidence against the Null hypothesis. The Null
+hypothesis is rejected. Data does not follow Normal distribution.
+
+```{r}
+# Anderson-Darling test for Weibull Distribution
+gof_weibull_type3 <- gofstat(fit_weibull_type3)
+print(gof_weibull_type3)
+```
+
+**Findings:** 0.06317595 is the Kolmogorov-Smirnov statistic for the fit
+of the Weibull distribution. The closer this value is to 0, the better
+the fit. A value of 0.063 suggests a reasonable fit. 3.25188944 of
+Cramer-von Mises statistic. Like the Kolmogorov-Smirnov statistic, a
+smaller value indicates a better fit. 23.48750588 of Anderson-Darling
+statistic measures the fit of the distribution more sensitively for the
+tails of the distribution. 23.48750588 is relatively large, suggesting
+that the Weibull distribution may not perfectly fit the data. Akaike's
+Information Criterion (AIC): 31514.51 and Bayesian Information Criterion
+(BIC): 31525.70 will be compared with the same results for different
+distributions to choose better fit.
+
+### Operational Risk Type 4
+
+#### Fitting different distributions
+
+```{r warning=FALSE}
+# Fitting historical data to Lognormal distribution
+fit_lnorm_type4 <- fitdist(or_type4$Loss, "lnorm")
+summary(fit_lnorm_type4)
+```
+
+```{r warning=FALSE}
+# Fitting historical data to Normal distribution
+fit_norm_type4 <- fitdist(or_type4$Loss, "norm")
+summary(fit_norm_type4)
+```
+
+```{r warning=FALSE}
+# Fitting historical data to Weibull distribution
+fit_weibull_type4 <- fitdist(or_type4$Loss, "weibull")
+summary(fit_weibull_type4)
+```
+
+```{r}
+# Plotting fitted Log-Normal distribution
+par(mfrow = c(2, 2)) 
+plot(fit_lnorm_type4)
+```
+
+```{r}
+# Plotting fitted Normal distribution
+par(mfrow = c(2, 2)) 
+plot(fit_norm_type4)
+```
+
+```{r}
+# Plotting fitted Weibull distribution
+par(mfrow = c(2, 2)) 
+plot(fit_weibull_type4)
+```
+
+#### Statistical tests
+
+**Formulation hypothesis:** The Null hypothesis (H0) the sample comes
+from the reference distribution (Log-Normal/Normal/Weibull
+distribution). The Alternative hypothesis (HA) is that the sample does
+not come from the reference distribution (Log-Normal/Normal/ Weibull
+distribution).
+
+```{r}
+# Removing duplicates from the data
+or_type4_unique <- unique(or_type4$Loss)
+# Kolmogorov-Smirnov test for Lognormal distribution with unique values
+ks_lnorm_type4 <- ks.test(or_type4_unique, "plnorm", 
+                          meanlog = fit_lnorm_type4$estimate["meanlog"], 
+                          sdlog = fit_lnorm_type4$estimate["sdlog"])
+print(ks_lnorm_type4)
+```
+
+**Findings:** The p-value is very small \< 2.2e-16. A very small p-value
+suggests strong evidence against the Null hypothesis. The Null
+hypothesis is rejected. Data does not follow Log-Normal distribution.
+
+```{r}
+# Kolmogorov-Smirnov test for Normal distribution
+ks_norm_type4 <- ks.test(or_type4_unique, "pnorm", 
+                         mean = fit_norm_type4$estimate["mean"], 
+                         sd = fit_norm_type4$estimate["sd"])
+print(ks_norm_type4)
+```
+
+**Findings:** The p-value is very small \< 2.2e-16. A very small p-value
+suggests strong evidence against the Null hypothesis. The Null
+hypothesis is rejected. Data does not follow Normal distribution.
+
+```{r}
+# Kolmogorov-Smirnov test for Weibull distribution with unique values
+ks_weibull_type4 <- ks.test(or_type4_unique, "pweibull", 
+                            shape = fit_weibull_type4$estimate["shape"], 
+                            scale = fit_weibull_type4$estimate["scale"])
+print(ks_weibull_type4)
+```
+
+**Findings:** The p-value is very small = 1.281e-09. A very small
+p-value suggests strong evidence against the Null hypothesis. The Null
+hypothesis is rejected. Data does not follow Weibull distribution.
+
+```{r}
+# Anderson-Darling test for Lognormal Distribution
+gof_lnorm_type4 <- gofstat(fit_lnorm_type4)
+print(gof_lnorm_type4)
+```
+
+**Findings:** 0.04526112 is the Kolmogorov-Smirnov statistic for the fit
+of the Log-Normal distribution. The closer this value is to 0, the
+better the fit. A value of 0.0453 suggests a reasonable fit. 1.01021590
+of Cramer-von Mises statistic. Like the Kolmogorov-Smirnov statistic, a
+smaller value indicates a better fit. 7.60988652 of Anderson-Darling
+statistic measures the fit of the distribution more sensitively for the
+tails of the distribution. 7.60988652 is relatively small value,
+suggesting that the Log-Normal distribution may fit the data. Akaike's
+Information Criterion (AIC): 29924.04 and Bayesian Information Criterion
+(BIC): 29935.18 will be compared with the same results for different
+distributions to choose better fit.
+
+```{r}
+# Anderson-Darling test for Normal Distribution
+ad_norm_type4 <- ad.test(or_type4$Loss)
+print(ad_norm_type4)
+```
+
+**Findings:** The p-value is very small \< 2.2e-16. A very small p-value
+suggests strong evidence against the Null hypothesis. The Null
+hypothesis is rejected. Data does not follow Normal distribution.
+
+```{r}
+# Anderson-Darling test for Weibull Distribution
+gof_weibull_type4 <- gofstat(fit_weibull_type4)
+print(gof_weibull_type4)
+```
+
+**Findings:** 0.09451375 is the Kolmogorov-Smirnov statistic for the fit
+of the Weibull distribution. The closer this value is to 0, the better
+the fit. A value of 0.095 suggests a reasonable fit. 3.79108238 of
+Cramer-von Mises statistic. Like the Kolmogorov-Smirnov statistic, a
+smaller value indicates a better fit. 27.58905294 of Anderson-Darling
+statistic measures the fit of the distribution more sensitively for the
+tails of the distribution. 27.5891 is relatively large, suggesting that
+the Weibull distribution may not perfectly fit the data. Akaike's
+Information Criterion (AIC): 30262.54 and Bayesian Information Criterion
+(BIC): 30273.68 will be compared with the same results for different
+distributions to choose better fit.
+
+### Choosing better fit for the different types of Operational Risks
+
+**Summary:** Normal distribution will not be considered for statistical
+modelling as data for all types of Operational Risks show skewed
+distribution and also fitting data to Normal Distribution failed
+statistical tests for all types of Operational Risks.
+
+#### Operational Risk Type 1:
+
+*Log-Normal:* Kolmogorov-Smirnov: 0.0607 Cramer-von Mises: 2.8347
+Anderson-Darling: 18.1880 Akaike's Information Criterion (AIC): 31347.48
+Bayesian Information Criterion (BIC): 31358.64
+
+*Weibull:* Kolmogorov-Smirnov: 0.0177 Cramer-von Mises: 0.0777
+Anderson-Darling: 0.4320 Akaike's Information Criterion (AIC): 31077.43
+Bayesian Information Criterion (BIC): 31088.59 Better Fit: Weibull, as
+it has lower values across all test statistics (KS, CvM, AD, AIC, and
+BIC).
+
+#### Operational Risk Type 2:
+
+*Log-Normal:* Kolmogorov-Smirnov: 0.0726 Cramer-von Mises: 3.6853
+Anderson-Darling: 22.8698 Akaike's Information Criterion (AIC): 32858.31
+Bayesian Information Criterion (BIC): 32869.53
+
+*Weibull:* Kolmogorov-Smirnov: 0.0088 Cramer-von Mises: 0.0233
+Anderson-Darling: 0.2084 Akaike's Information Criterion (AIC): 32511.32
+Bayesian Information Criterion (BIC): 32522.55 Better Fit: Weibull, as
+it has lower test statistics across the board (KS, CvM, AD, AIC, and
+BIC).
+
+#### Operational Risk Type 3:
+
+*Log-Normal:* Kolmogorov-Smirnov: 0.0122 Cramer-von Mises: 0.0496
+Anderson-Darling: 0.2711 Akaike's Information Criterion (AIC): 31180.70
+Bayesian Information Criterion (BIC): 31191.89
+
+*Weibull:* Kolmogorov-Smirnov: 0.0632 Cramer-von Mises: 3.2519
+Anderson-Darling: 23.4875 Akaike's Information Criterion (AIC): 31514.51
+Bayesian Information Criterion (BIC): 31525.70 Better Fit: Log-normal,
+as it has lower values for Kolmogorov-Smirnov, Cramer-von Mises,
+Anderson-Darling, AIC, and BIC.
+
+#### Operational Risk Type 4:
+
+*Log-Normal:* Kolmogorov-Smirnov: 0.0453 Cramer-von Mises: 1.0102
+Anderson-Darling: 7.6099 Akaike's Information Criterion (AIC): 29924.04
+Bayesian Information Criterion (BIC): 29935.18
+
+*Weibull:* Kolmogorov-Smirnov: 0.0945 Cramer-von Mises: 3.7911
+Anderson-Darling: 27.5891 Akaike's Information Criterion (AIC): 30262.54
+Bayesian Information Criterion (BIC): 30273.68 Better Fit: Log-normal,
+as it has lower values for all test statistics (KS, CvM, AD, AIC, and
+BIC)
+
+Based on the above, the Weibull Distribution is chosen for Operational
+Risk Type 1 and Type 2, and Log-Normal Distribution is chosen for
+Operational Risk Type 3 and Type 4.
+
+## Statistical Modelling
+
+### Modelling Poisson Distribution
+
+Poisson distribution will be used to generate frequency (number) of
+Operational Risk Events for all 4 types of Operational Risks.
+
+#### Operational Risk Type 1
+
+```{r}
+# Calculation lambda or mean of Operational Risks per month
+head(or_type1_bymonths)
+lambda_or_type1_bymonths <- mean(or_type1_bymonths$Frequency_Monthly)
+print(lambda_or_type1_bymonths)
+```
+
+```{r}
+# Generation of Poisson Distribution for Operational Risk Type 1
+set.seed(123)
+poisson_or_type1 <- rpois(n = 100000, 
+                          lambda = lambda_or_type1_bymonths)
+head(poisson_or_type1)
+tail(poisson_or_type1)
+```
+
+#### Operational Risk Type 2
+
+```{r}
+# Calculation lambda or mean of Operational Risks per month
+head(or_type2_bymonths)
+lambda_or_type2_bymonths <- mean(or_type2_bymonths$Frequency_Monthly)
+print(lambda_or_type2_bymonths)
+```
+
+```{r}
+# Generation of Poisson Distribution for Operational Risk Type 2
+set.seed(456)
+poisson_or_type2 <- rpois(n = 100000, 
+                          lambda = lambda_or_type2_bymonths)
+head(poisson_or_type2)
+tail(poisson_or_type2)
+```
+
+#### Operational Risk Type 3
+
+```{r}
+# Calculation lambda or mean of Operational Risks per month
+head(or_type3_bymonths)
+lambda_or_type3_bymonths <- mean(or_type3_bymonths$Frequency_Monthly)
+print(lambda_or_type3_bymonths)
+```
+
+```{r}
+# Generation of Poisson Distribution for Operational Risk Type 3
+set.seed(789)
+poisson_or_type3 <- rpois(n = 100000, 
+                          lambda = lambda_or_type3_bymonths)
+head(poisson_or_type3)
+tail(poisson_or_type3)
+```
+
+#### Operational Risk Type 4
+
+```{r}
+# Calculation lambda or mean of Operational Risks per month
+head(or_type4_bymonths)
+lambda_or_type4_bymonths <- mean(or_type4_bymonths$Frequency_Monthly)
+print(lambda_or_type4_bymonths)
+```
+
+```{r}
+# Generation of Poisson Distribution for Operational Risk Type 4
+set.seed(012)
+poisson_or_type4 <- rpois(n = 100000, 
+                          lambda = lambda_or_type4_bymonths)
+head(poisson_or_type4)
+tail(poisson_or_type4)
+
+```
+
+### Modelling Weibull Distribution
+
+Weibull distribution will be used to generate amounts (impact/severity)
+of Operational Risk Events for Operational Risks Type 1 and Type 2.
+
+#### Operational Risk Type 1
+
+```{r warning=FALSE}
+# Estimating shape and scale parameters (fitting Weibull distribution) for Operational Risk Type 1
+fit_weibull_type1 <- fitdist(or_type1$Loss, "weibull")
+# Getting estimated parameters
+shape_or_type1 <- fit_weibull_type1$estimate["shape"]
+scale_or_type1 <- fit_weibull_type1$estimate["scale"]
+```
+
+```{r}
+# Generating Weibull distribution with estimated parameters for Operational Risk Type 1
+set.seed(123)
+weibull_or_type1 <- rweibull(n = 100000, 
+                             shape = shape_or_type1, 
+                             scale = scale_or_type1)
+# View the first few generated values
+head(weibull_or_type1)
+```
+
+#### Operational Risk Type 2
+
+```{r warning=FALSE}
+# Estimating shape and scale parameters (fitting Weibull distribution) for Operational Risk Type 2
+fit_weibull_type2 <- fitdist(or_type2$Loss, "weibull")
+# Getting estimated parameters
+shape_or_type2 <- fit_weibull_type2$estimate["shape"]
+scale_or_type2 <- fit_weibull_type2$estimate["scale"]
+```
+
+```{r}
+# Generating Weibull distribution with estimated parameters for Operational Risk Type 2
+set.seed(456)
+weibull_or_type2 <- rweibull(n = 100000, 
+                             shape = shape_or_type2, 
+                             scale = scale_or_type2)
+# View the first few generated values
+head(weibull_or_type2)
+```
+
+### Modelling Log-Normal Distribution
+
+Log-Normal distribution will be used to generate amounts
+(impact/severity) of Operational Risk Events for Operational Risks Type
+3 and Type 4.
+
+#### Operational Risk Type 3
+
+```{r warning=FALSE}
+# Estimating meanlog and sdlog parameters (fit Log-Normal distribution) for Operational Risk Type 3
+fit_lnorm_type3 <- fitdist(or_type3$Loss, "lnorm")
+# Getting estimated parameters
+meanlog_type3 <- fit_lnorm_type3$estimate["meanlog"]
+sdlog_type3 <- fit_lnorm_type3$estimate["sdlog"]
+```
+
+```{r}
+# Generating Log-Normal distribution with estimated parameters for Operational Risk Type 3
+set.seed(789)
+lnorm_or_type3 <- rlnorm(n = 100000, 
+                         meanlog = meanlog_type3, 
+                         sdlog = sdlog_type3)
+# Viewing the first few generated values
+head(lnorm_or_type3)
+```
+
+#### Operational Risk Type 4
+
+```{r warning=FALSE}
+# Estimating meanlog and sdlog parameters (fit Log-Normal distribution) for Operational Risk Type 4
+fit_lnorm_type4 <- fitdist(or_type4$Loss, "lnorm")
+# Getting estimated parameters
+meanlog_type4 <- fit_lnorm_type4$estimate["meanlog"]
+sdlog_type4 <- fit_lnorm_type4$estimate["sdlog"]
+```
+
+```{r}
+# Generating Log-Normal distribution with estimated parameters for Operational Risk Type 4
+set.seed(012)
+lnorm_or_type4 <- rlnorm(n = 100000, 
+                         meanlog = meanlog_type4, 
+                         sdlog = sdlog_type4)
+# View the first few generated values
+head(lnorm_or_type4)
+```
+
+## Operational Risk Value-at-Risk Computation
+
+### Data preprocessing
+
+Creation of combined data frame of all generated distributions (Poisson,
+Weibull and Log-Normal) for all types of Operational Risks.
+
+```{r}
+# Creating combined data frame
+generated_data <- data.frame(Poisson_OR_Type1 = poisson_or_type1, 
+                             Poisson_OR_Type2 = poisson_or_type2,
+                             Poisson_OR_Type3 = poisson_or_type3, 
+                             Poisson_OR_Type4 = poisson_or_type4,
+                             Weibull_OR_Type1 = weibull_or_type1, 
+                             Weibull_OR_Type2 = weibull_or_type2,
+                             Lognorm_OR_Type3 = lnorm_or_type3, 
+                             Lognorm_OR_Type4 = lnorm_or_type4)
+```
+
+```{r}
+# Checking data frame
+head(generated_data)
+tail(generated_data)
+```
+
+**Findings:** All variables have 100000 observations with proper data
+types.
+
+Multiplication (product) of frequency (number) of Operational Risk
+Losses and amounts (impact/severity) of Operational Risk Losses for each
+Type of Operational Risk and calculation of Total Operational Risk
+Losses.
+
+```{r}
+generated_data$OR_Loss_Type1 <- generated_data$Poisson_OR_Type1 * generated_data$Weibull_OR_Type1
+generated_data$OR_Loss_Type2 <- generated_data$Poisson_OR_Type2 * generated_data$Weibull_OR_Type2
+generated_data$OR_Loss_Type3 <- generated_data$Poisson_OR_Type3 * generated_data$Lognorm_OR_Type3
+generated_data$OR_Loss_Type4 <- generated_data$Poisson_OR_Type4 * generated_data$Lognorm_OR_Type4
+generated_data$Total_OR_Losses <- generated_data$OR_Loss_Type1 + generated_data$OR_Loss_Type2 +
+  generated_data$OR_Loss_Type3 + generated_data$OR_Loss_Type4
+```
+
+```{r}
+# Checking created data frame
+summary(generated_data)
+str(generated_data)
+glimpse(generated_data)
+```
+
+### Visualization of generated distributions
+
+#### Operational Risk Type 1
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Histogram of distribution of Operational Risk Type 1
+ggplot(data = generated_data, aes(x = OR_Loss_Type1)) +
+  geom_histogram(binwidth = 1500, fill = "blue", 
+                 color = "grey", alpha = 0.7) +
+  labs(title = "Histogram of Operational Risk Type 1", 
+       x = "Operational Risk Loss (USD)", y = "Frequency") +
+  theme_minimal()
+```
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Boxplot of distribution of Operational Risk Type 1
+ggplot(data = generated_data, aes(x = OR_Loss_Type1)) +
+  geom_boxplot(fill = "blue", 
+               color = "black", alpha = 0.7) +
+  labs(title = "Boxplot of Operational Risk Type 1", 
+       x = "Operational Risk Loss (USD)") +
+  theme_minimal()
+```
+
+#### Operational Risk Type 2
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Histogram of distribution of Operational Risk Type 2
+ggplot(data = generated_data, aes(x = OR_Loss_Type2)) +
+  geom_histogram(binwidth = 1500, fill = "green", 
+                 color = "black", alpha = 0.7) +
+  labs(title = "Histogram of Operational Risk Type 2", 
+       x = "Operational Risk Loss (USD)", y = "Frequency") +
+  theme_minimal()
+```
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Boxplot of distribution of Operational Risk Type 2
+ggplot(data = generated_data, aes(x = OR_Loss_Type1)) +
+  geom_boxplot(fill = "green", 
+               color = "black", alpha = 0.7) +
+  labs(title = "Boxplot of Operational Risk Type 2", 
+       x = "Operational Risk Loss (USD)") +
+  theme_minimal()
+```
+
+#### Operational Risk Type 3
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Histogram of distribution of Operational Risk Type 3
+ggplot(data = generated_data, aes(x = OR_Loss_Type3)) +
+  geom_histogram(binwidth = 2500, 
+                 fill = "red", color = "black", alpha = 0.7) +
+  labs(title = "Histogram of Operational Risk Type 3", 
+       x = "Operational Risk Loss (USD)", y = "Frequency") +
+  scale_x_continuous(labels = scales::label_number()) +
+  scale_y_continuous(labels = scales::label_number()) +
+  theme_minimal()
+```
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Boxplot of distribution of Operational Risk Type 3
+ggplot(data = generated_data, aes(x = OR_Loss_Type3)) +
+  geom_boxplot(fill = "blue", 
+               color = "black", alpha = 0.7) +
+  labs(title = "Boxplot of Operational Risk Losses Type 3", 
+       x = "Operational Risk Loss (USD)") +
+  scale_x_continuous(labels = scales::label_number()) +
+  scale_y_continuous(labels = scales::label_number()) +
+  theme_minimal()
+```
+
+#### Operational Risk Type 4
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Histogram of distribution of Operational Risk Type 4
+ggplot(data = generated_data, aes(x = OR_Loss_Type4)) +
+  geom_histogram(binwidth = 2500, fill = "skyblue", 
+                 color = "black", alpha = 0.7) +
+  labs(title = "Histogram of Operational Risk Losses Type 4", 
+       x = "Operational Risk Loss (USD)", y = "Frequency") +
+  scale_x_continuous(labels = scales::label_number()) +
+  scale_y_continuous(labels = scales::label_number()) +
+  theme_minimal()
+```
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Boxplot of distribution of Operational Risk Type 4
+ggplot(data = generated_data, aes(x = OR_Loss_Type4)) +
+  geom_boxplot(fill = "skyblue", 
+               color = "black", alpha = 0.7) +
+  labs(title = "Boxplot of Operational Risk Losses Type 4", 
+       x = "Operational Risk Loss (USD)") +
+  scale_x_continuous(labels = scales::label_number()) +
+  scale_y_continuous(labels = scales::label_number()) +
+  theme_minimal()
+```
+
+### Total Operational Risk Losses
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Histogram of distribution of Total Operational Risk Losses
+ggplot(data = generated_data, aes(x = Total_OR_Losses)) +
+  geom_histogram(binwidth = 3500, fill = "yellow", 
+                 color = "black", alpha = 0.7) +
+  labs(title = "Histogram of Total Operational Risk Losses", 
+       x = "Operational Risk Loss (USD)", y = "Frequency") +
+  scale_x_continuous(labels = scales::label_number()) +
+  scale_y_continuous(labels = scales::label_number()) +
+  theme_minimal()
+```
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Boxplot of distribution of Total Operational Risk Losses
+ggplot(data = generated_data, aes(x = Total_OR_Losses)) +
+  geom_boxplot(fill = "yellow", 
+               color = "black", alpha = 0.7) +
+  labs(title = "Boxplot of Total Operational Risk Losses", 
+       x = "Operational Risk Loss (USD)") +
+  scale_x_continuous(labels = scales::label_number()) +
+  scale_y_continuous(labels = scales::label_number()) +
+  theme_minimal()
+```
+
+### Operational Risk Value-at-Risk computation
+
+Operational Risk Value-at-Risk calculated for confidence levels: 75%,
+95%, 99% and 99.9%.
+
+```{r}
+# Computation of Operational Risk Value-at-Risk
+probs <- c(0.75, 0.95, 0.99, 0.999)
+or_var <- quantile(generated_data$Total_OR_Losses, probs)
+print(or_var)
+```
+
+```{r}
+# Converting data to a data frame and changing column name
+or_var <- as.data.frame(or_var)
+colnames(or_var) <- "var_monthly"
+head(or_var)
+```
+
+Calculation of monthly Expected Loss (mean), Expected Loss (median),
+Unexpected Loss (mean) and Unexpected Loss (median) and calculation of
+yearly Value-at-Risk by multiplication of monthly Value-at-Risk (VaR) by
+square root of 12. In addition, calculation yearly Expected Loss (mean),
+Expected Loss (median), Unexpected Loss (mean) and Unexpected Loss
+(median).
+
+```{r}
+# Perform the calculation
+or_var$EL_mean_monthly <- mean(generated_data$Total_OR_Losses)
+or_var$EL_median_monthly <- median(generated_data$Total_OR_Losses)
+or_var$UL_mean_monthly <- or_var$var_monthly - or_var$EL_mean_monthly
+or_var$UL_median_monthly <- or_var$var_monthly - or_var$EL_median_monthly
+or_var$var_yearly <- or_var$var_monthly * sqrt(12)
+or_var$EL_mean_yearly <- or_var$EL_mean_monthly * sqrt(12)
+or_var$EL_median_yearly <- or_var$EL_median_monthly * sqrt(12)
+or_var$UL_mean_yearly <- or_var$var_yearly - or_var$EL_mean_yearly
+or_var$UL_median_yearly <- or_var$var_yearly - or_var$EL_median_yearly
+```
+
+```{r}
+# Checking Operational Risk Value-at-Risk computation data frame
+print(or_var)
+or_var <- t(or_var)
+print(or_var)
+```
+
+## **Conclusion:**
+
+Computation of Operational Risk Value-at-Risk (VaR) given one approach
+for generation of frequency (number) of Operational Risk Events using
+Poisson Distribution for types of Operational Risks and 2 different
+approaches for generation of amounts (impact/severity) of Operational
+Risk Events: Weibull and Log-Normal Distributions for different types of
+Operational Risks based on results of statistical estimations showed
+following results: 1. Expected Loss (EL) or mathematical expectation is
+USD 68913.24 taken as mean value and 63186.06 taken as median value are
+the same for all confidence intervals (75%, 95%, 99% and 99.9%). 2.
+Monthly Operational Risk Value-at-Risk showed the following results: -
+Monthly Value-at-Risk (VaR) with 75% confidence level is USD 85384.03
+and Unexpected Loss (UL) is USD 16470.79 (mean) and USD 22197.96
+(median). - Monthly Value-at-Risk (VaR) with 95% confidence level is USD
+128643.69 and Unexpected Loss (UL) is USD 59730.45 (mean) and USD
+65457.63 (median). - Monthly Value-at-Risk (VaR) with 99% confidence
+level is USD 170304.83 and Unexpected Loss (UL) is USD 1101391.14 (mean)
+and USD 107118.32 (median). - Monthly Value-at-Risk (VaR) with 99.9%
+confidence level is USD 235723.77 and Unexpected Loss (UL) is USD
+166810.53 (mean) and USD 172537.71 (median). 3. Yearly Operational Risk
+Value-at-Risk is calculated by multiplication (product) of monthly
+Value-at-Risk by square root of 12 and showed the following results: -
+Yearly Value-at-Risk (VaR) with 75% confidence level is USD 295778.94
+and Unexpected Loss (UL) is USD 57066.48 (mean) and USD 76896.00
+(median). - Yearly Value-at-Risk (VaR) with 95% confidence level is USD
+445634.81 and Unexpected Loss (UL) is USD 206912.36 (mean) and USD
+226751.88 (median). - Yearly Value-at-Risk (VaR) with 99% confidence
+level is USD 589951.68 and Unexpected Loss (UL) is USD 351229.22 (mean)
+and USD 371068.74 (median). - Yearly Value-at-Risk (VaR) with 99.9%
+confidence level is USD 816571.10 and Unexpected Loss (UL) is USD
+577848.64 (mean) and USD 597688.16 (median). As all distributions of
+Operational Risks are skewed to the left and show many outliers it is
+recommended to take Median values for Expected Loss instead of Mean
+values.
