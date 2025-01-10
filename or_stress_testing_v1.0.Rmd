@@ -1,0 +1,3858 @@
+---
+title: "Statistical Modelling of Operational Risk Stress - Testing with Macroeconomic
+  Model using R Programming Language (version 1.0)"
+author: "Imir Osmanov"
+date: "2025-01-08"
+output:
+  pdf_document:
+    latex_engine: xelatex
+  html_document:
+    df_print: paged
+  word_document: default
+---
+
+Stress testing (forecasting) of Operational Risk Losses is performed using a Linear Regression Model for the amounts of losses (impact/severity) and a Poisson Regression Model for the frequency (number) of Operational Risk events, all within the R programming language. The historical data for Operational Risk losses is sourced from the "OpVaR" R package (Note: this package is now archived, and the currency of the losses is undefined, so the losses are assumed to be in US dollars). This data is used for computation within the notebook.
+
+Banking statistics for second-tier banks in Kazakhstan are downloaded from the website of the National Bank of Kazakhstan (www.nationalbank.kz), and macroeconomic data for Kazakhstan is sourced from the "AFR" R package.
+
+This project is intended solely for educational purposes to demonstrate R programming skills and knowledge of statistical methodologies. It does not aim to make financial forecasts, draw conclusions, or provide financial or methodological recommendations.
+
+Note: The data used for Operational Risk Losses does not belong to the banking industry of Kazakhstan and does not reflect its actual Operational Risk exposure.
+
+# EXECUTIVE SUMMARY
+## Purpose:
+The purpose of this analysis is to apply statistical methodologies for stress testing Operational Risks based on macroeconomic models, leveraging automation in the R programming language. The scope of the study includes the development of a methodology for Operational Risk Stress Testing using various regression models: Multiple Linear Regression, Multiple Poisson Regression, and Multiple Negative Binomial Regression.
+
+## Main findings:
+Stress testing of Operational Risks, using Multiple Linear Regression to predict the amount (impact/severity) of losses, and Multiple Poisson Regression and Multiple Negative Binomial Regression to predict the frequency (number) of losses, indicates that the Multiple Poisson Regression models provide reasonable results for predicting the frequency of losses. The results from Multiple Negative Binomial Regression closely resemble those of the Multiple Poisson Regression models.
+
+The Operational Risk Losses data was cleaned from outliers and macroeconomic variables were also transformed before modelling to yearly values to avoid increasing and decreasing trends as they were expressed in quarters.
+For statistical tests, the threshold for R² (Coefficient of Determination) was set at 0.35 (35%), and an alpha level of 0.1 (90% confidence) was adopted.
+
+The best model for predicting the amounts (impact/severity) of Operational Risk losses was selected using the following independent variables (regressors) from the "AFR" R package dataset:
+
+GDD_Trn_R_y: Real Gross Value Added for Transportation,
+GDD_Inf_R_y: Real Gross Value Added for Information,
+Rincpop_q_y: Real Population Average Monthly Income.
+The dependent variable was the share (portion) of Total Operational Risk Losses in the assets of bank "X". The R² of this model was 0.44 (44%).
+
+The best model for predicting the frequency (number) of Operational Risk losses was selected for both Multiple Poisson Regression and Multiple Linear Regression, using the following independent variables (regressors):
+
+ruktzt: RUB/KZT exchange rate,
+Rincpop_q_y: Real Population Average Monthly Income,
+Rexppop_q_y: Real Population Average Monthly Expenses.
+The dependent variable was the total frequency (number) of Operational Risk losses for bank "X". The R² values are as follows:
+Multiple Poisson Regression: Pseudo R² = 0.48 (r2ML, r2CU)
+Multiple Linear Regression: R² = 0.50
+Correlation analysis showed a negative correlation between independent and dependent variables across all models. The models predicted the following outputs:
+
+Multiple Linear Regression (Amount of Operational Risk Losses):
+
+Positive scenario: Worst loss amount is KZT 26,034,185,
+Negative scenario: Worst loss amount is KZT 76,779,811.
+
+Multiple Poisson Regression (Frequency of Operational Risk Losses):
+Positive scenario: Worst frequency is 531,
+Negative scenario: Worst frequency is 186.
+
+Multiple Linear Regression (Frequency of Operational Risk Losses):
+Positive scenario: Worst frequency is 387,
+Negative scenario: Worst frequency is 185.
+
+The results of Stress Testing should be interpreted with caution, as some modeling assumptions, such as Linearity and Normality, are not fully satisfied.
+
+## Methodology:
+The methodology for modeling Operational Risk losses uses regression models, such as Multiple Linear Regression for predicting the amount (impact/severity) of losses, and Multiple Poisson Regression and Multiple Linear Regression for predicting the frequency (number) of Operational Risk events. The best model was selected from 1330 possible sets of independent macroeconomic variables, based on the highest R² (Coefficient of Determination). The model also successfully passed statistical tests for multicollinearity (Variance Inflation Factor) and stationarity.
+
+Forecasting of Operational Risk losses was performed using the coefficients of the regression models. The loss amounts were considered as the share (portion) of Operational Risk losses relative to the total assets. The total assets value was derived from the "Total Assets" of all second-tier banks in Kazakhstan.
+
+## Recommendations:
+Although it is challenging to directly correlate individual company financial data with national macroeconomic variables, further study is recommended to explore different types of Operational Risks. Applying regression models could help establish relationships between macroeconomic factors and specific Operational Risk categories, such as:
+
+Basel Operational Risk classification: Internal Fraud, External Fraud, Employment Practices, and Workplace Safety, Clients, Products, and Business Practices, Execution, Delivery and Process Management, Business Disruption, System Failures, and Damage to Physical Assets (Note: Damage to Physical Assets is expected to have no significant relationship with macroeconomic variables.).
+
+## Importing required R packages (libraries):
+```{r message=TRUE, warning=FALSE}
+# Importing required R packages (libraries):
+library(AFR)
+library(tidyverse)
+library(ggplot2)
+library(readxl)
+library(corrplot)
+library(lubridate)
+library(scales)
+library(zoo)
+library(combinat)
+library(car)
+library(lmtest)
+library(tseries)
+library(MASS)
+library(dplyr)
+library(ggfortify)
+library(GGally)
+library(glm2)
+library(pscl)
+library(MASS)
+library(ggpubr)
+```
+
+## Analysis of Dependent Variables
+
+### Banking industry statistics
+
+#### Downloading banking industry statistics
+
+```{r warning=FALSE}
+# Downloading necessary files
+# Banking statistics
+banking_stats <- read_csv("C:\\Users\\user\\Documents\\Imir\\My Data Analysis Projects\\Data\\bank_stats_2010_2023.csv")
+banking_stats <- as.data.frame(banking_stats)
+head(banking_stats)
+tail(banking_stats)
+```
+```{r}
+# Checking dataframes for datatypes and size
+summary(banking_stats)
+str(banking_stats)
+```
+**Findings:** The banking industry statistics reflects the value of total assets of second-tier banks. There are 168 observations for period from 01.01.2010 to 01.12.2023.
+
+```{r}
+# Checking for missing values
+cat("\nMissing values per column:\n")
+missing_values <- colSums(is.na(banking_stats))
+print(missing_values)
+
+# Checking for duplicated rows
+cat("\nDuplicated rows:\n")
+duplicated_rows <- banking_stats[duplicated(banking_stats), ]
+if (nrow(duplicated_rows) > 0) {
+  print(duplicated_rows)
+} else {
+  cat("No duplicated rows found.\n")
+}
+```
+**Findings:** There are no missing or duplicated values in the data frame on banking statistics.
+
+#### Data preprocessing
+
+```{r}
+# Dropping columns "File Name"
+banking_stats <- banking_stats %>% dplyr::select(-`File Name`)
+```
+
+```{r}
+# Renaming column "Sheet Name" to "Date"
+banking_stats <- banking_stats %>% rename(Date = `Sheet Name`, Value = Value)
+str(banking_stats)
+```
+```{r}
+# Changing data types of "Date" and "Value" columns
+banking_stats$`Date` <- as.Date(banking_stats$`Date`, format = "%d.%m.%Y")
+banking_stats$Value <- format(banking_stats$Value, scientific = FALSE)
+str(banking_stats)
+```
+```{r}
+# Checking data frame
+head(banking_stats)
+tail(banking_stats)
+```
+```{r}
+# Filtering dataframe to include only data for 3, 6, 9 and 12 months or 1st, 2nd, 3rd and 4th Quarters.
+banking_stats$Date <- as.Date(banking_stats$Date)
+banking_stats_filtered <- banking_stats %>% 
+  filter(format(Date, "%m") %in% c("03", "06", "09", "12"))
+```
+
+```{r}
+# Checking data frame
+str(banking_stats_filtered)
+head(banking_stats_filtered)
+tail(banking_stats_filtered)
+```
+**Findings:** The "Value" column is character data type and should be corrected.
+
+```{r}
+# Create a new column for 'Value (Billion)'
+# Convert 'Value' column to numeric
+banking_stats_filtered$Value <- as.numeric(banking_stats_filtered$Value)
+
+# Now perform the division to create the 'Value (Billion)' column
+banking_stats_filtered$`Value_billion` <- banking_stats_filtered$Value / 1000000000
+```
+
+```{r}
+# Checking the data frame
+str(banking_stats_filtered)
+head(banking_stats_filtered)
+```
+#### Analisys of banking industry statistics
+
+```{r}
+# Analyzing the data frame
+glimpse(banking_stats_filtered)
+summary(banking_stats_filtered)
+```
+**Findings:** The minimum value of the data frame is KZT 11.75 billions, mean is KZT 24.07 billions and maximum value is KZT 49.17 billions.
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Creating the line plot
+ggplot(banking_stats_filtered, aes(x = Date, y = `Value_billion`)) +
+  geom_line() + 
+  geom_point() +  
+  labs(
+    x = 'Year',
+    y = 'Total Assets (Billions KZT)',
+    title = 'Total Assets of Banking System'
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+**Findings:** The total assets of Kazakhstan's banking industry have shown a consistent and rapid increase over time, with no significant downturns observed.
+
+### Operational Risk Losses
+
+#### Downloading data on Operational Risk Losses
+
+#### Operational Risk Type 1
+
+```{r}
+# Downloading necessary files
+# Operational losses type 1
+or_type1 <- read_excel("C:\\Users\\user\\Documents\\Imir\\My Data Analysis Projects\\Data\\file1.xlsx")
+or_type1 <- as.data.frame(or_type1)
+head(or_type1)
+tail(or_type1)
+```
+#### Exploratory Data Analysis of Operational Risk Type 1
+```{r}
+# Checking for missing values
+cat("\nMissing values per column:\n")
+missing_values <- colSums(is.na(or_type1))
+print(missing_values)
+
+# Checking for duplicated rows
+cat("\nDuplicated rows:\n")
+duplicated_rows <- or_type1[duplicated(or_type1), ]
+if (nrow(duplicated_rows) > 0) {
+  print(duplicated_rows)
+} else {
+  cat("No duplicated rows found.\n")
+}
+```
+**Findings:** There are no null and duplicated values in Operational
+Risk Type 1.
+
+```{r}
+# Exploratory data analysis
+summary(or_type1)
+glimpse(or_type1)
+str(or_type1)
+```
+**Findings:** The dataset contains 1,965 observations for Operational Risk Type 1. All columns have appropriate data types. The descriptive statistics for the dataset are as follows:
+Minimum value: USD 5
+Mean: USD 1,017
+Median: USD 760
+Maximum: USD 6,382
+
+#### Visualization of Operational Risk Type 1
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Histogram of distribution of Operational Risk Losses type 1
+ggplot(data = or_type1, mapping = aes(x = Loss)) +
+  geom_histogram(binwidth = 50, 
+                 fill = "blue", color = "black", alpha = 0.7) +
+  labs(title = "Histogram of Operational Risk Type 1", 
+       x = "Loss amount (USD)", y = "Frequency") +
+  theme_bw()
+```
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Boxplot of distribution of Operational Risk Losses type 1
+ggplot(data = or_type1, mapping = aes(x = Loss)) +
+  geom_boxplot(fill = "blue", 
+               color = "black", alpha = 0.7) +
+  labs(title = "Boxplot of Operational Risk Type 1", 
+       x = "Loss amount (USD)") +
+  theme_bw()
+```
+**Findings:** The histogram and boxplot indicate the presence of outliers, which is further supported by the significant difference between the mean and the median.
+
+#### Data preprocessing for Operational Risk Type 1
+
+```{r}
+# Extracting outliers from dataframe
+Quartile_1 <- quantile(or_type1$Loss, 0.25) 
+Quartile_3 <- quantile(or_type1$Loss, 0.75) 
+IQR <- Quartile_3 - Quartile_1                 
+lower_bound <- Quartile_1 - 1.5 * IQR         
+upper_bound <- Quartile_3 + 1.5 * IQR        
+
+# Identifying outliers
+outliers_loss_1 <- or_type1$Loss[or_type1$Loss < lower_bound | or_type1$Loss > upper_bound]
+
+# Print the outliers
+print("Outliers (IQR method):")
+print(outliers_loss_1)
+
+```
+```{r}
+# Filtering the dataset to exclude outliers
+or_type1_cleaned <- or_type1[or_type1$Loss >= lower_bound & 
+                               or_type1$Loss <= upper_bound, ]
+
+# Print the cleaned dataset
+print("Dataset after removing outliers:")
+head(or_type1_cleaned)
+str(or_type1_cleaned)
+```
+```{r}
+# Exploratory data analysis
+str(or_type1_cleaned)
+summary(or_type1_cleaned)
+```
+**Findings:** There are: 1892 observations for Operational Risk Type 1.
+All columns have proper data types. Minimum value is USD 5, mean is USD
+911, median USD 716 and maximum is USD 3029. The data is cleaned from outliers.
+
+#### Visualization of Operational Risk Type 1  after cleaning from outliers
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Histogram of distribution of Operational Risk Losses type 1
+ggplot(data = or_type1_cleaned, mapping = aes(x = Loss)) +
+  geom_histogram(binwidth = 50, 
+                 fill = "blue", color = "black", alpha = 0.7) +
+  labs(title = "Histogram of Operational Risk Type 1 after cleaning from outliers", 
+       x = "Loss amount (USD)", y = "Frequency") +
+  theme_bw()
+```
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Boxplot of distribution of Operational Risk Losses type 1
+ggplot(data = or_type1_cleaned, mapping = aes(x = Loss)) +
+  geom_boxplot(fill = "blue", 
+               color = "black", alpha = 0.7) +
+  labs(title = "Boxplot of Operational Risk Type 1 after cleaning from outliers", 
+       x = "Loss amount (USD)") +
+  theme_bw()
+```
+**Findings:** The histogram and boxplot indicate the absence of many outliers, which is further supported by the lack of a significant difference between the mean and the median.
+
+```{r}
+# Extracting 'Year' and 'Month' from the 'Date' column
+or_type1_cleaned$Year <- year(or_type1_cleaned$Date)
+or_type1_cleaned$Month <- month(or_type1_cleaned$Date)
+
+# Grouping by 'Year' and 'Month', summing the 'Loss' column
+or_loss_type1_monthly <- or_type1_cleaned %>%
+  group_by(Year, Month) %>%
+  summarise(Loss_1 = sum(Loss, na.rm = TRUE), .groups = "drop")
+```
+
+```{r}
+# Printing the first 5 rows
+head(or_loss_type1_monthly)
+
+# Printing the last 5 rows
+tail(or_loss_type1_monthly)
+
+str(or_loss_type1_monthly)
+```
+```{r}
+# Creating a 'Month_Group' column based on the specified month intervals (3, 6, 9, 12 months)
+or_loss_type1_monthly$Month_Group <- case_when(
+  or_loss_type1_monthly$Month %in% c(1, 2, 3) ~ "Q1",
+  or_loss_type1_monthly$Month %in% c(4, 5, 6) ~ "Q2",
+  or_loss_type1_monthly$Month %in% c(7, 8, 9) ~ "Q3",
+  or_loss_type1_monthly$Month %in% c(10, 11, 12) ~ "Q4",
+  TRUE ~ "Other"
+)
+
+# Grouping by 'Year' and 'Month_Group', summing the 'Loss_1' column
+grouped_by_month_type1 <- or_loss_type1_monthly %>%
+  group_by(Year, Month_Group) %>%
+  summarise(Total_Loss_1 = sum(Loss_1, na.rm = TRUE), .groups = "drop")
+```
+
+```{r}
+# Checking the results
+head(grouped_by_month_type1)
+tail(grouped_by_month_type1)
+```
+```{r}
+# Creating a 'Year-Quarter' column in the "YYYY-QX" format
+grouped_by_month_type1$Year_Quarter <- paste0(grouped_by_month_type1$Year, 
+                                              "-Q", gsub("Q", "", 
+                                                         grouped_by_month_type1$Month_Group))
+
+# Checking the results
+head(grouped_by_month_type1)
+
+```
+```{r}
+# Droping 'Year' and 'Month_Group' columns and reordering the remaining columns
+or_loss_type1_quarterly <- grouped_by_month_type1 %>% 
+  dplyr::select(Year_Quarter, Total_Loss_1)
+```
+
+```{r}
+# Checking data frame
+head(or_loss_type1_quarterly)
+```
+
+#### Operational Risk Type 2
+
+```{r}
+# Downloading necessary files
+# Operational losses type 2
+or_type2 <- read_excel("C:\\Users\\user\\Documents\\Imir\\My Data Analysis Projects\\Data\\file2.xlsx")
+head(or_type2)
+tail(or_type2)
+```
+#### Exploratory Data Analysis of Operational Risk Type 2
+
+```{r}
+# Checking for missing values
+cat("\nMissing values per column:\n")
+missing_values <- colSums(is.na(or_type2))
+print(missing_values)
+
+# Checking for duplicated rows
+cat("\nDuplicated rows:\n")
+duplicated_rows <- or_type2[duplicated(or_type2), ]
+if (nrow(duplicated_rows) > 0) {
+  print(duplicated_rows)
+} else {
+  cat("No duplicated rows found.\n")
+}
+```
+**Findings:** There are no null and duplicated values in Operational
+Risk Type 2.
+
+```{r}
+# Exploratory data analysis
+summary(or_type2)
+glimpse(or_type2)
+str(or_type2)
+```
+**Findings:** There are: 2025 observations for Operational Risk Type 2.
+All columns have proper data types. Minimum value is USD 3, mean is USD
+1139, median USD 850 and maximum is USD 6213.
+
+#### Visualization of Operational Risk Type 2
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Histogram of distribution of Operational Risk Losses type 2
+ggplot(data = or_type2, mapping = aes(x = Loss)) +
+  geom_histogram(binwidth = 50, fill = "red", 
+                 color = "black", alpha = 0.7) +
+  labs(title = "Histogram of Operational Risk Type 2", 
+       x = "Loss amount (USD)", y = "Frequency") +
+  theme_bw()
+```
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Boxplot of distribution of Operational Risk Losses type 2
+ggplot(data = or_type2, mapping = aes(x = Loss)) +
+  geom_boxplot(fill = "red", 
+               color = "black", alpha = 0.7) +
+  labs(title = "Boxplot of Operational Risk Type 2", 
+       x = "Loss amount (USD)") +
+  theme_bw()
+```
+**Findings:** The histogram and boxplot reveal the presence of outliers, as evidenced by a significant difference between the mean and the median.
+
+#### Data preprocessing for Operational Risk Type 2
+
+```{r}
+# Extracting outliers from dataframe
+Quartile_1 <- quantile(or_type2$Loss, 0.25) # 25th percentile
+Quartile_3 <- quantile(or_type2$Loss, 0.75) # 75th percentile
+IQR <- Quartile_3 - Quartile_1                 # Interquartile range
+lower_bound <- Quartile_1 - 1.5 * IQR          # Lower bound
+upper_bound <- Quartile_3 + 1.5 * IQR          # Upper bound
+
+# Identifying outliers
+outliers_loss_2 <- or_type2$Loss[or_type2$Loss < lower_bound | or_type2$Loss > upper_bound]
+
+# Print the outliers
+print("Outliers (IQR method):")
+print(outliers_loss_2)
+```
+```{r}
+# Filtering the dataset to exclude outliers
+or_type2_cleaned <- or_type2[or_type2$Loss >= lower_bound & 
+                               or_type2$Loss <= upper_bound, ]
+
+# Print the cleaned dataset
+print("Dataset after removing outliers:")
+head(or_type2_cleaned)
+str(or_type2_cleaned)
+```
+```{r}
+# Exploratory data analysis
+str(or_type2_cleaned)
+summary(or_type2_cleaned)
+```
+**Findings:** The dataset contains 1,946 observations for Operational Risk Type 2. All columns have appropriate data types. The descriptive statistics are as follows:
+Minimum value: USD 3
+Mean: USD 1,016.5
+Median: USD 806
+Maximum: USD 3,424
+The data has been cleaned to remove outliers.
+
+#### Visualization of Operational Risk Type 2 after cleaning from outliers
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Histogram of distribution of Operational Risk Losses type 2
+ggplot(data = or_type2_cleaned, mapping = aes(x = Loss)) +
+  geom_histogram(binwidth = 50, fill = "red", 
+                 color = "black", alpha = 0.7) +
+  labs(title = "Histogram of Operational Risk Type 2after cleaning from outliers ", 
+       x = "Loss amount (USD)", y = "Frequency") +
+  theme_bw()
+```
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Boxplot of distribution of Operational Risk Losses type 2
+ggplot(data = or_type2_cleaned, mapping = aes(x = Loss)) +
+  geom_boxplot(fill = "red", 
+               color = "black", alpha = 0.7) +
+  labs(title = "Boxplot of Operational Risk Type 2 after cleaning from outliers", 
+       x = "Loss amount (USD)") +
+  theme_bw()
+```
+**Findings:** The histogram and boxplot indicate the absence of many outliers, which is further supported by the minimal difference between the mean and the median.
+
+```{r}
+# Extracting 'Year' and 'Month' from the 'Date' column
+or_type2_cleaned$Year <- year(or_type2_cleaned$Date)
+or_type2_cleaned$Month <- month(or_type2_cleaned$Date)
+
+# Grouping by 'Year' and 'Month', summing the 'Loss' column
+or_loss_type2_monthly <- or_type2_cleaned %>%
+  group_by(Year, Month) %>%
+  summarise(Loss_2 = sum(Loss, na.rm = TRUE), .groups = "drop")
+```
+
+```{r}
+# Printing the first 5 rows
+head(or_loss_type2_monthly)
+
+# Printing the last 5 rows
+tail(or_loss_type2_monthly)
+
+str(or_loss_type2_monthly)
+```
+```{r}
+# Creating a 'Month_Group' column based on the specified month intervals (3, 6, 9, 12 months)
+or_loss_type2_monthly$Month_Group <- case_when(
+  or_loss_type2_monthly$Month %in% c(1, 2, 3) ~ "Q1",
+  or_loss_type2_monthly$Month %in% c(4, 5, 6) ~ "Q2",
+  or_loss_type2_monthly$Month %in% c(7, 8, 9) ~ "Q3",
+  or_loss_type2_monthly$Month %in% c(10, 11, 12) ~ "Q4",
+  TRUE ~ "Other"
+)
+
+# Grouping by 'Year' and 'Month_Group', summing the 'Loss_1' column
+grouped_by_month_type2 <- or_loss_type2_monthly %>%
+  group_by(Year, Month_Group) %>%
+  summarise(Total_Loss_2 = sum(Loss_2, na.rm = TRUE), .groups = "drop")
+```
+
+```{r}
+# Checking the results
+head(grouped_by_month_type2)
+tail(grouped_by_month_type2)
+```
+```{r}
+# Creating a 'Year-Quarter' column in the "YYYY-QX" format
+grouped_by_month_type2$Year_Quarter <- paste0(grouped_by_month_type2$Year, 
+                                              "-Q", gsub("Q", "", 
+                                                         grouped_by_month_type2$Month_Group))
+
+# Checking the results
+head(grouped_by_month_type2)
+
+```
+```{r}
+# Droping 'Year' and 'Month_Group' columns and reordering the remaining columns
+or_loss_type2_quarterly <- grouped_by_month_type2 %>% 
+  dplyr::select(Year_Quarter, Total_Loss_2)
+```
+
+```{r}
+# Checking data frame
+head(or_loss_type2_quarterly)
+```
+
+
+#### Operational Risk Type 3
+
+```{r}
+# Downloading necessary files
+# Operational losses type 3
+or_type3 <- read_excel("C:\\Users\\user\\Documents\\Imir\\My Data Analysis Projects\\Data\\file3.xlsx")
+head(or_type3)
+tail(or_type3)
+```
+#### Exploratory Data Analysis of Operational Risk Type 3
+
+```{r}
+# Check for missing values
+cat("\nMissing values per column:\n")
+missing_values <- colSums(is.na(or_type3))
+print(missing_values)
+
+# Check for duplicated rows
+cat("\nDuplicated rows:\n")
+duplicated_rows <- or_type3[duplicated(or_type3), ]
+if (nrow(duplicated_rows) > 0) {
+  print(duplicated_rows)
+} else {
+  cat("No duplicated rows found.\n")
+}
+```
+**Findings:** There are no null and duplicated values in Operational
+Risk Type 3.
+
+```{r}
+# Exploratory data analysis
+summary(or_type3)
+glimpse(or_type3)
+str(or_type3)
+```
+**Findings:** The dataset contains 1,995 observations for Operational Risk Type 3. All columns have appropriate data types. The descriptive statistics are as follows:
+Minimum value: USD 48
+Mean: USD 1,052
+Median: USD 788
+Maximum: USD 12,092
+
+#### Visualization of Operational Risk Type 3
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Histogram of distribution of Operational Risk Losses type 3
+ggplot(data = or_type3, mapping = aes(x = Loss)) +
+  geom_histogram(binwidth = 50, fill = "green", 
+                 color = "black", alpha = 0.7) +
+  labs(title = "Histogram of Operational Risk Type 3", 
+       x = "Loss amount (USD)", y = "Frequency") +
+  theme_bw()
+```
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Boxplot of distribution of Operational Risk Losses type 3
+ggplot(data = or_type3, mapping = aes(x = Loss)) +
+  geom_boxplot(fill = "green", 
+               color = "black", alpha = 0.7) +
+  labs(title = "Boxplot of Operational Risk Type 3", 
+       x = "Loss amount (USD)") +
+  theme_bw()
+```
+**Findings:** The histogram and boxplot indicate the presence of outliers, which is further confirmed by a significant difference between the mean and the median.
+
+#### Data preprocessing for Operational Risk Type 3
+
+```{r}
+# Extracting outliers from dataframe
+Quartile_1 <- quantile(or_type3$Loss, 0.25) # 25th percentile
+Quartile_3 <- quantile(or_type3$Loss, 0.75) # 75th percentile
+IQR <- Quartile_3 - Quartile_1                 # Interquartile range
+lower_bound <- Quartile_1 - 1.5 * IQR          # Lower bound
+upper_bound <- Quartile_3 + 1.5 * IQR          # Upper bound
+
+# Identifying outliers
+outliers_loss_3 <- or_type3$Loss[or_type3$Loss < lower_bound | or_type3$Loss > upper_bound]
+
+# Print the outliers
+print("Outliers (IQR method):")
+print(outliers_loss_3)
+```
+```{r}
+# Filtering the dataset to exclude outliers
+or_type3_cleaned <- or_type3[or_type3$Loss >= lower_bound & 
+                               or_type3$Loss <= upper_bound, ]
+
+# Print the cleaned dataset
+print("Dataset after removing outliers:")
+head(or_type3_cleaned)
+str(or_type3_cleaned)
+```
+
+```{r}
+# Exploratory data analysis
+str(or_type3_cleaned)
+summary(or_type3_cleaned)
+```
+
+**Findings:** The dataset contains 1,888 observations for Operational Risk Type 3. All columns have appropriate data types. The descriptive statistics are as follows:
+Minimum value: USD 48
+Mean: USD 889.2
+Median: USD 747
+Maximum: USD 2,614
+The data has been cleaned to remove outliers.
+
+#### Visualization of Operational Risk Type 3 after cleaning from outliers
+
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Histogram of distribution of Operational Risk Losses type 3
+ggplot(data = or_type3_cleaned, mapping = aes(x = Loss)) +
+  geom_histogram(binwidth = 50, fill = "green", 
+                 color = "black", alpha = 0.7) +
+  labs(title = "Histogram of Operational Risk Type 3", 
+       x = "Loss amount (USD)", y = "Frequency") +
+  theme_bw()
+```
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Boxplot of distribution of Operational Risk Losses type 3
+ggplot(data = or_type3_cleaned, mapping = aes(x = Loss)) +
+  geom_boxplot(fill = "green", 
+               color = "black", alpha = 0.7) +
+  labs(title = "Boxplot of Operational Risk Type 3", 
+       x = "Loss amount (USD)") +
+  theme_bw()
+```
+**Findings:** The histogram and boxplot indicate the absence of many outliers, which is further confirmed by the lack of a significant difference between the mean and the median.
+
+```{r}
+# Extracting 'Year' and 'Month' from the 'Date' column
+or_type3_cleaned$Year <- year(or_type3_cleaned$Date)
+or_type3_cleaned$Month <- month(or_type3_cleaned$Date)
+
+# Grouping by 'Year' and 'Month', summing the 'Loss' column
+or_loss_type3_monthly <- or_type3_cleaned %>%
+  group_by(Year, Month) %>%
+  summarise(Loss_3 = sum(Loss, na.rm = TRUE), .groups = "drop")
+```
+
+```{r}
+# Printing the first 5 rows
+head(or_loss_type3_monthly)
+
+# Printing the last 5 rows
+tail(or_loss_type3_monthly)
+
+str(or_loss_type3_monthly)
+```
+```{r}
+# Creating a 'Month_Group' column based on the specified month intervals (3, 6, 9, 12 months)
+or_loss_type3_monthly$Month_Group <- case_when(
+  or_loss_type3_monthly$Month %in% c(1, 2, 3) ~ "Q1",
+  or_loss_type3_monthly$Month %in% c(4, 5, 6) ~ "Q2",
+  or_loss_type3_monthly$Month %in% c(7, 8, 9) ~ "Q3",
+  or_loss_type3_monthly$Month %in% c(10, 11, 12) ~ "Q4",
+  TRUE ~ "Other"
+)
+
+# Grouping by 'Year' and 'Month_Group', summing the 'Loss_1' column
+grouped_by_month_type3 <- or_loss_type3_monthly %>%
+  group_by(Year, Month_Group) %>%
+  summarise(Total_Loss_3 = sum(Loss_3, na.rm = TRUE), .groups = "drop")
+```
+
+```{r}
+# Checking the results
+head(grouped_by_month_type3)
+tail(grouped_by_month_type3)
+```
+```{r}
+# Creating a 'Year-Quarter' column in the "YYYY-QX" format
+grouped_by_month_type3$Year_Quarter <- paste0(grouped_by_month_type3$Year, 
+                                              "-Q", gsub("Q", "", 
+                                                         grouped_by_month_type3$Month_Group))
+
+# Checking the results
+head(grouped_by_month_type3)
+
+```
+```{r}
+# Droping 'Year' and 'Month_Group' columns and reordering the remaining columns
+or_loss_type3_quarterly <- grouped_by_month_type3 %>% 
+  dplyr::select(Year_Quarter, Total_Loss_3)
+```
+
+```{r}
+# Checking data frame
+head(or_loss_type3_quarterly)
+```
+
+#### Operational Risk Type 4
+
+```{r}
+# Downloading necessary files
+# Operational losses type 4
+or_type4 <- read_excel("C:\\Users\\user\\Documents\\Imir\\My Data Analysis Projects\\Data\\file4.xlsx")
+head(or_type4)
+tail(or_type4)
+```
+#### Exploratory Data Analysis of Operational Risk Type 4
+
+```{r}
+# Checking for missing values
+cat("\nMissing values per column:\n")
+missing_values <- colSums(is.na(or_type4))
+print(missing_values)
+
+# Checking for duplicated rows
+cat("\nDuplicated rows:\n")
+duplicated_rows <- or_type4[duplicated(or_type4), ]
+if (nrow(duplicated_rows) > 0) {
+  print(duplicated_rows)
+} else {
+  cat("No duplicated rows found.\n")
+}
+```
+**Findings:** There are no null and duplicated values in Operational
+Risk Type 4.
+
+```{r}
+# Exploratory data analysis
+summary(or_type4)
+glimpse(or_type4)
+str(or_type4)
+```
+**Findings:** There are: 1941 observations for Operational Risk Type 4.
+All columns have proper data types. Minimum value is USD 201, mean is
+USD 969.1, median USD 717 and maximum is USD 6215.
+
+#### Visualization of Operational Risk Type 4
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Histogram of distribution of Operational Risk Losses type 4
+ggplot(data = or_type4, mapping = aes(x = Loss)) +
+  geom_histogram(binwidth = 50, fill = "skyblue", 
+                 color = "black", alpha = 0.7) +
+  labs(title = "Histogram of Operational Risk Type 4", 
+       x = "Loss amount (USD)", y = "Frequency") +
+  theme_bw()
+```
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Boxplot of distribution of Operational Risk Losses type 4
+ggplot(data = or_type4, mapping = aes(x = Loss)) +
+  geom_boxplot(fill = "skyblue", color = "black", alpha = 0.7) +
+  labs(title = "Boxplot of Operational Risk Type 4", 
+       x = "Loss amount (USD)") +
+  theme_bw()
+```
+**Findings:** The histogram and boxplot reveal the presence of outliers, which is further confirmed by the significant difference between the mean and the median.
+
+#### Data preprocessing for Operational Risk Type 4
+
+```{r}
+# Extracting outliers from dataframe
+Quartile_1 <- quantile(or_type4$Loss, 0.25) # 25th percentile
+Quartile_3 <- quantile(or_type4$Loss, 0.75) # 75th percentile
+IQR <- Quartile_3 - Quartile_1                 # Interquartile range
+lower_bound <- Quartile_1 - 1.5 * IQR          # Lower bound
+upper_bound <- Quartile_3 + 1.5 * IQR          # Upper bound
+
+# Identifying outliers
+outliers_loss_4 <- or_type4$Loss[or_type4$Loss < lower_bound | or_type4$Loss > upper_bound]
+
+# Print the outliers
+print("Outliers (IQR method):")
+print(outliers_loss_4)
+```
+```{r}
+# Filtering the dataset to exclude outliers
+or_type4_cleaned <- or_type4[or_type4$Loss >= lower_bound & 
+                               or_type4$Loss <= upper_bound, ]
+
+# Print the cleaned dataset
+print("Dataset after removing outliers:")
+head(or_type4_cleaned)
+str(or_type4_cleaned)
+```
+
+```{r}
+# Exploratory data analysis
+str(or_type4_cleaned)
+summary(or_type4_cleaned)
+```
+**Findings:** The dataset contains 1,828 observations for Operational Risk Type 4. All columns have appropriate data types. The descriptive statistics are as follows:
+Minimum value: USD 201
+Mean: USD 829.5
+Median: USD 681
+Maximum: USD 1,133.5
+The data has been cleaned to remove outliers.
+
+#### Visualization of Operational Risk Type 3 after cleaning from outliers
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Histogram of distribution of Operational Risk Losses type 4
+ggplot(data = or_type4_cleaned, mapping = aes(x = Loss)) +
+  geom_histogram(binwidth = 50, fill = "skyblue", 
+                 color = "black", alpha = 0.7) +
+  labs(title = "Histogram of Operational Risk Type 4 after cleaning from outliers", 
+       x = "Loss amount (USD)", y = "Frequency") +
+  theme_bw()
+```
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Boxplot of distribution of Operational Risk Losses type 4
+ggplot(data = or_type4_cleaned, mapping = aes(x = Loss)) +
+  geom_boxplot(fill = "skyblue", color = "black", alpha = 0.7) +
+  labs(title = "Boxplot of Operational Risk Type 4 after cleaning from outliers", 
+       x = "Loss amount (USD)") +
+  theme_bw()
+```
+**Findings:** The histogram and boxplot indicate the absence of many outliers, which is further supported by the lack of a significant difference between the mean and the median.
+
+```{r}
+# Extracting 'Year' and 'Month' from the 'Date' column
+or_type4_cleaned$Year <- year(or_type4_cleaned$Date)
+or_type4_cleaned$Month <- month(or_type4_cleaned$Date)
+
+# Grouping by 'Year' and 'Month', summing the 'Loss' column
+or_loss_type4_monthly <- or_type4_cleaned %>%
+  group_by(Year, Month) %>%
+  summarise(Loss_4 = sum(Loss, na.rm = TRUE), .groups = "drop")
+```
+
+```{r}
+# Printing the first 5 rows
+head(or_loss_type4_monthly)
+
+# Printing the last 5 rows
+tail(or_loss_type4_monthly)
+
+str(or_loss_type4_monthly)
+```
+
+```{r}
+# Creating a 'Month_Group' column based on the specified month intervals (3, 6, 9, 12 months)
+or_loss_type4_monthly$Month_Group <- case_when(
+  or_loss_type4_monthly$Month %in% c(1, 2, 3) ~ "Q1",
+  or_loss_type4_monthly$Month %in% c(4, 5, 6) ~ "Q2",
+  or_loss_type4_monthly$Month %in% c(7, 8, 9) ~ "Q3",
+  or_loss_type4_monthly$Month %in% c(10, 11, 12) ~ "Q4",
+  TRUE ~ "Other"
+)
+
+# Grouping by 'Year' and 'Month_Group', summing the 'Loss_1' column
+grouped_by_month_type4 <- or_loss_type4_monthly %>%
+  group_by(Year, Month_Group) %>%
+  summarise(Total_Loss_4 = sum(Loss_4, na.rm = TRUE), .groups = "drop")
+```
+
+```{r}
+# Checking the results
+head(grouped_by_month_type4)
+tail(grouped_by_month_type4)
+```
+
+```{r}
+# Creating a 'Year-Quarter' column in the "YYYY-QX" format
+grouped_by_month_type4$Year_Quarter <- paste0(grouped_by_month_type4$Year, 
+                                              "-Q", gsub("Q", "", 
+                                                         grouped_by_month_type4$Month_Group))
+
+# Checking the results
+head(grouped_by_month_type4)
+
+```
+```{r}
+# Droping 'Year' and 'Month_Group' columns and reordering the remaining columns
+or_loss_type4_quarterly <- grouped_by_month_type4 %>% 
+  dplyr::select(Year_Quarter, Total_Loss_4)
+```
+
+```{r}
+# Checking data frame
+head(or_loss_type4_quarterly)
+```
+
+```{r}
+# Filtering data for creation of combined data frame of Operational Risk Losses
+or_type2_df <- or_loss_type2_quarterly %>% 
+  dplyr:: select(Total_Loss_2)
+head(or_type2_df)
+
+or_type3_df <- or_loss_type3_quarterly %>% 
+  dplyr:: select(Total_Loss_3)
+head(or_type3_df)
+
+or_type4_df <- or_loss_type4_quarterly %>% 
+  dplyr:: select(Total_Loss_4)
+head(or_type4_df)
+
+```
+```{r}
+# Creating combined data frame of Operational Risk Losses
+or_losses_total <- cbind(or_loss_type1_quarterly, or_type2_df, 
+                         or_type3_df, or_type4_df)
+or_losses_total$Total_or_losses <- or_losses_total$Total_Loss_1 + 
+  or_losses_total$Total_Loss_2 + or_losses_total$Total_Loss_3 + 
+  or_losses_total$Total_Loss_4
+or_losses_total <- as.data.frame(or_losses_total)
+head(or_losses_total)
+tail(or_losses_total)
+str(or_losses_total)
+
+
+```
+#### Visualization of total Operational Risk Losses
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Histogram of total Operational Risk Losses
+ggplot(data = or_losses_total, aes(x = Total_or_losses)) +
+  geom_histogram(binwidth = 10000, 
+                 fill = "yellow", color = "black", alpha = 0.7, aes(y = ..density..)) +
+    labs(title = "Distribution of Total Operational Risk Losses", 
+       x = "Operational loss (amount) in USD", y = "Frequency") +
+  scale_x_continuous(labels = scales::label_number()) +
+  scale_y_continuous(labels = scales::label_number()) +
+  theme_minimal()
+```
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Boxplot of total Operational Risk Losses
+ggplot(data = or_losses_total, mapping = aes(x = Total_or_losses)) +
+  geom_boxplot(fill = "yellow", color = "black", alpha = 0.7) +
+  labs(title = "Boxplot of Operational Risk Type 1", x = "Loss amount (USD)") +
+  scale_x_continuous(labels = scales::label_number()) +
+  scale_y_continuous(labels = scales::label_number()) +
+  theme_bw()
+```
+**Findings:** There are gaps in the distribution of the total amounts of Operational Risk Losses.
+
+
+
+## Analysis of Macro Variables
+
+### Downloading macroeconomic dataset from "AFR" package
+
+```{r}
+# Downloading macroeconomic dataset from "AFR" package
+head(macroKZ)
+tail(macroKZ)
+str(macroKZ)
+```
+**Findings:** The dataset is a time-series dataset that includes 57 rows and 60 columns of macroeconomic data for Kazakhstan, covering the period from Q1-2010 to Q1-2024.
+
+As per the "AFR" package project description (https://CRAN.R-project.org/package=AFR), the dataset contains the following data (50 macroeconomic and 10 financial parameters) for the 2010-2024 period:
+
+real_gdp: Real GDP;
+GDD_Agr_R: Real gross value added – Agriculture;
+GDD_Min_R: Real gross value added – Mining;
+GDD_Man_R: Real gross value added – Manufacture;
+GDD_Elc_R: Real gross value added – Electricity;
+GDD_Con_R: Real gross value added – Construction;
+GDD_Trd_R: Real gross value added – Trade;
+GDD_Trn_R: Real gross value added – Transportation;
+GDD_Inf_R: Real gross value added – Information;
+GDD_Est_R: Real gross value added – Real estate;
+GDD_R: Real gross value added;
+GDP_DEF: GDP deflator;
+Rincpop_q: Real population average monthly income;
+Rexppop_q: Real population average monthly expenses;
+Rwage_q: Real population average monthly wage;
+imp: Import;
+exp: Export;
+cpi: Inflation;
+realest_resed_prim: Real price for estate in primary market;
+realest_resed_sec: Real price for estate in secondary market;
+realest_comm: Real price for commercial estate;
+index_stock_weighted: Change in stock value for traded companies;
+ntrade_Agr: Change in stock value for non-traded companies – Agriculture;
+ntrade_Min: Change in stock value for non-traded companies – Mining;
+ntrade_Man: Change in stock value for non-traded companies – Manufacture;
+ntrade_Elc: Change in stock value for non-traded companies – Electricity;
+ntrade_Con: Change in stock value for non-traded companies – Construction;
+ntrade_Trd: Change in stock value for non-traded companies – Trade;
+ntrade_Trn: Change in stock value for non-traded companies – Transportation;
+ntrade_Inf: Change in stock value for non-traded companies – Information;
+fed_fund_rate: Federal Funds Rate;
+govsec_rate_kzt_3m: Return on government securities in KZT, 3 months;
+govsec_rate_kzt_1y: Return on government securities in KZT, 1 year;
+govsec_rate_kzt_7y: Return on government securities in KZT, 7 years;
+govsec_rate_kzt_10y: Return on government securities in KZT, 10 years;
+tonia_rate: TONIA;
+rate_kzt_mort_0y_1y: Weighted average mortgage lending rate for new loans, less than a year;
+rate_kzt_mort_1y_iy: Weighted average mortgage lending rate for new loans, more than a year;
+rate_kzt_corp_0y_1y: Weighted average mortgage lending rate for new loans to non-financial organizations in KZT, less than a year;
+rate_usd_corp_0y_1y: Weighted average mortgage lending rate for new loans to non-financial organizations in USD, less than a year;
+rate_kzt_corp_1y_iy: Weighted average mortgage lending rate for new loans to non-financial organizations in KZT, more than a year;
+rate_usd_corp_1y_iy: Weighted average mortgage lending rate for new loans to non-financial organizations in USD, more than a year;
+rate_kzt_indv_0y_1y: Weighted average mortgage lending rate for consumer loans in KZT, less than a year;
+rate_kzt_indv_1y_iy: Weighted average mortgage lending rate for consumer loans in KZT, more than a year;
+usdkzt: USD/KZT exchange rate;
+eurkzt: EUR/KZT exchange rate;
+rurkzt: RUB/KZT exchange rate;
+poil: Price for Brent crude oil;
+realest_resed_prim_rus: Real price for estate in primary market in Russia;
+realest_resed_sec_rus: Real price for estate in secondary market in Russia;
+cred_portfolio: Credit portfolio;
+coef_k1: K1 prudential coefficient;
+coef_k3: K3 prudential coefficient;
+provisions: Provisions;
+percent_margin: Percent margin;
+com_inc: Commissionary income;
+com_exp: Commissionary expenses;
+oper_inc: Operational income;
+oth_inc: Other income;
+DR: Default rate.
+
+#### Data preprocessing
+
+```{r}
+# Converting macroeconomic dataset to a data frame
+macrokz_df <- as.data.frame(macroKZ)
+str(macrokz_df)
+```
+```{r}
+# Checking for missing values
+cat("\nMissing values per column:\n")
+missing_values <- colSums(is.na(macrokz_df))
+print(missing_values)
+
+# Checking for duplicated rows
+cat("\nDuplicated rows:\n")
+duplicated_rows <- macrokz_df[duplicated(macrokz_df), ]
+if (nrow(duplicated_rows) > 0) {
+  print(duplicated_rows)
+} else {
+  cat("No duplicated rows found.\n")
+}
+```
+**Findings:** There are no missing or duplicated values in a macroeconomic data frame.
+
+```{r}
+# Adding the time period as a new column to macroeconomic data frame
+# Generating quarterly time periods from Q1 2010 to Q1 2024
+time_period <- seq(from = as.Date("2010-04-01"), 
+                   to = as.Date("2024-04-01"), 
+                   by = "quarter")
+macrokz_df$time_period <- time_period
+str(macrokz_df)
+```
+**Findings:** The data frame contains irrelevant macroeconomic variables that should be excluded before modeling.
+
+
+#### Data preprocessing
+
+```{r}
+# Filtering the data frame and excluding irrelevant variables
+macro_df_filtered <- macrokz_df %>% 
+  dplyr:: select(-imp, -exp, -GDP_DEF, -realest_resed_prim, -realest_resed_sec, 
+         -realest_comm, -index_stock_weighted, -ntrade_Agr, -ntrade_Min, 
+         -ntrade_Man, -ntrade_Elc, -ntrade_Con, -ntrade_Trd, -ntrade_Trn, 
+         -ntrade_Inf, -fed_fund_rate, -govsec_rate_kzt_3m, govsec_rate_kzt_1y, 
+         -govsec_rate_kzt_7y, -govsec_rate_kzt_10y, -tonia_rate, 
+         -rate_kzt_mort_0y_1y, -rate_kzt_mort_1y_iy, -rate_kzt_corp_0y_1y, 
+         -rate_usd_corp_0y_1y, - rate_kzt_corp_1y_iy, -rate_usd_corp_1y_iy, 
+         -rate_kzt_indv_0y_1y, -rate_kzt_indv_1y_iy, -realest_resed_prim_rus, 
+         -realest_resed_sec_rus, -cred_portfolio, -coef_k1, -coef_k3, 
+         -provisions, -percent_margin, -com_inc, -com_exp, -oper_inc, -oth_inc, -DR)
+head(macro_df_filtered)
+```
+
+#### Variables Transformation
+
+The macroeconomic variables are reported quarterly and exhibit both increasing and decreasing trends throughout the year. These variables should be transformed and expressed in annual values for consistency and better modeling.
+
+```{r}
+# Transformation of Real GDP variable
+# Calculating yearly GDP sum (sum of every 4 quarters)
+macro_df_filtered$Yearly_GDP_Sum <- c(
+  sapply(1:(nrow(macro_df_filtered) - 3), 
+         function(i) sum(macro_df_filtered$real_gdp[i:(i + 3)])), 
+  rep(NA, 3) 
+)
+
+# Calculating growth rate as the percentage of current year's GDP over the previous year's GDP
+macro_df_filtered$real_gdp_y <- c(rep(NA, 4), 
+                                  sapply(5:nrow(macro_df_filtered), 
+                                         function(i) {
+  previous_year_sum <- sum(macro_df_filtered$real_gdp[(i - 4):(i - 1)]) 
+  current_year_sum <- sum(macro_df_filtered$real_gdp[(i):(i + 3)])      
+  growth_rate <- (current_year_sum / previous_year_sum - 1) * 100
+  return(round(growth_rate, 3))  
+}))
+```
+
+```{r}
+# Transformation of Real gross value added Agriculture variable
+# Calculating yearly Real gross value added Agriculture sum (sum of every 4 quarters)
+macro_df_filtered$Yearly_GDD_Agr_R_Sum <- c(
+  sapply(1:(nrow(macro_df_filtered) - 3), 
+         function(i) sum(macro_df_filtered$GDD_Agr_R[i:(i + 3)])), 
+  rep(NA, 3)  
+)
+
+# Calculating growth rate as the percentage of current year's Real gross value added Agriculture over the previous year's Real gross value added Agriculture
+macro_df_filtered$GDD_Agr_R_y <- c(rep(NA, 4), 
+                                   sapply(5:nrow(macro_df_filtered), 
+                                          function(i) {
+  previous_year_sum <- sum(macro_df_filtered$GDD_Agr_R[(i - 4):(i - 1)]) 
+  current_year_sum <- sum(macro_df_filtered$GDD_Agr_R[(i):(i + 3)])      
+  growth_rate <- (current_year_sum / previous_year_sum - 1) * 100
+  return(round(growth_rate, 3))  
+}))
+```
+
+```{r}
+# Transformation of Real gross value added Mining variable
+# Calculating yearly Real gross value added Mining sum (sum of every 4 quarters)
+macro_df_filtered$Yearly_GDD_Min_R_Sum <- c(
+  sapply(1:(nrow(macro_df_filtered) - 3), 
+         function(i) sum(macro_df_filtered$GDD_Min_R[i:(i + 3)])), 
+  rep(NA, 3)
+)
+
+# Calculate growth rate as the percentage of current year's Real gross value added Mining over the previous year's Real gross value added Mining
+macro_df_filtered$GDD_Min_R_y <- c(rep(NA, 4), 
+                                   sapply(5:nrow(macro_df_filtered), 
+                                          function(i) {
+  previous_year_sum <- sum(macro_df_filtered$GDD_Min_R[(i - 4):(i - 1)]) 
+  current_year_sum <- sum(macro_df_filtered$GDD_Min_R[(i):(i + 3)])      
+  growth_rate <- (current_year_sum / previous_year_sum - 1) * 100
+  return(round(growth_rate, 3))  
+}))
+```
+
+```{r}
+# Transformation of Real gross value added Manufacture variable
+# Calculating yearly Real gross value added Manufacture sum (sum of every 4 quarters)
+macro_df_filtered$Yearly_GDD_Man_R_Sum <- c(
+  sapply(1:(nrow(macro_df_filtered) - 3), 
+         function(i) sum(macro_df_filtered$GDD_Man_R[i:(i + 3)])), 
+  rep(NA, 3)  
+)
+
+# Calculating growth rate as the percentage of current year's Real gross value added Manufacture over the previous year's Real gross value added Manufacture
+macro_df_filtered$GDD_Man_R_y <- c(rep(NA, 4), 
+                                   sapply(5:nrow(macro_df_filtered), 
+                                          function(i) {
+  previous_year_sum <- sum(macro_df_filtered$GDD_Man_R[(i - 4):(i - 1)]) 
+  current_year_sum <- sum(macro_df_filtered$GDD_Man_R[(i):(i + 3)])      
+  growth_rate <- (current_year_sum / previous_year_sum - 1) * 100
+  return(round(growth_rate, 3)) 
+}))
+```
+
+```{r}
+# Transformation of Real gross value added Electricity variable
+# Calculating Real gross value added Electricity sum (sum of every 4 quarters)
+macro_df_filtered$Yearly_GDD_Elc_R_Sum <- c(
+  sapply(1:(nrow(macro_df_filtered) - 3), 
+         function(i) sum(macro_df_filtered$GDD_Elc_R[i:(i + 3)])), 
+  rep(NA, 3) 
+)
+
+# Calculating growth rate as the percentage of current year's Real gross value added Electricity over the previous year's Real gross value added Electricity
+macro_df_filtered$GDD_Elc_R_y <- c(rep(NA, 4), 
+                                   sapply(5:nrow(macro_df_filtered), 
+                                          function(i) {
+  previous_year_sum <- sum(macro_df_filtered$GDD_Elc_R[(i - 4):(i - 1)])
+  current_year_sum <- sum(macro_df_filtered$GDD_Elc_R[(i):(i + 3)])    
+  growth_rate <- (current_year_sum / previous_year_sum - 1) * 100
+  return(round(growth_rate, 3)) 
+}))
+```
+
+```{r}
+# Transformation of Real gross value added Construction variable
+# Calculating yearly Real gross value added Construction sum (sum of every 4 quarters)
+macro_df_filtered$Yearly_GDD_Con_R_Sum <- c(
+  sapply(1:(nrow(macro_df_filtered) - 3), 
+         function(i) sum(macro_df_filtered$GDD_Con_R[i:(i + 3)])), 
+  rep(NA, 3)  # To match length with original data
+)
+
+# Calculating growth rate as the percentage of current year's Real gross value added Construction over the previous year's Real gross value added Construction
+macro_df_filtered$GDD_Con_R_y <- c(rep(NA, 4), 
+                                   sapply(5:nrow(macro_df_filtered), 
+                                          function(i) {
+  previous_year_sum <- sum(macro_df_filtered$GDD_Con_R[(i - 4):(i - 1)]) 
+  current_year_sum <- sum(macro_df_filtered$GDD_Con_R[(i):(i + 3)])    
+  growth_rate <- (current_year_sum / previous_year_sum - 1) * 100
+  return(round(growth_rate, 3)) 
+}))
+```
+
+```{r}
+# Transformation of Real gross value added Trade variable
+# Calculating yearly Real gross value added Trade sum (sum of every 4 quarters)
+macro_df_filtered$Yearly_GDD_Trd_R_Sum <- c(
+  sapply(1:(nrow(macro_df_filtered) - 3), 
+         function(i) sum(macro_df_filtered$GDD_Trd_R[i:(i + 3)])), 
+  rep(NA, 3)
+)
+
+# Calculating growth rate as the percentage of current year's Real gross value added Trade over the previous year's Real gross value added Trade
+macro_df_filtered$GDD_Trd_R_y <- c(rep(NA, 4), 
+                                   sapply(5:nrow(macro_df_filtered), 
+                                          function(i) {
+  previous_year_sum <- sum(macro_df_filtered$GDD_Trd_R[(i - 4):(i - 1)])
+  current_year_sum <- sum(macro_df_filtered$GDD_Trd_R[(i):(i + 3)])    
+  growth_rate <- (current_year_sum / previous_year_sum - 1) * 100
+  return(round(growth_rate, 3))  
+}))
+```
+
+```{r}
+# Transformation of Real gross value added Transportation variable
+# Calculating yearly Real gross value added Transportation sum (sum of every 4 quarters)
+macro_df_filtered$Yearly_GDD_Trn_R_Sum <- c(
+  sapply(1:(nrow(macro_df_filtered) - 3), 
+         function(i) sum(macro_df_filtered$GDD_Trn_R[i:(i + 3)])), 
+  rep(NA, 3)  
+)
+
+# Calculating growth rate as the percentage of current year's Real gross value added Transportation over the previous year's Real gross value added Transportation
+macro_df_filtered$GDD_Trn_R_y <- c(rep(NA, 4), 
+                                   sapply(5:nrow(macro_df_filtered), 
+                                          function(i) {
+  previous_year_sum <- sum(macro_df_filtered$GDD_Trn_R[(i - 4):(i - 1)]) 
+  current_year_sum <- sum(macro_df_filtered$GDD_Trn_R[(i):(i + 3)])     
+  growth_rate <- (current_year_sum / previous_year_sum - 1) * 100
+  return(round(growth_rate, 3)) 
+}))
+```
+
+```{r}
+# Transformation of Real gross value added Information variable
+# Calculating yearly Real gross value added Information sum (sum of every 4 quarters)
+macro_df_filtered$Yearly_GDD_Inf_R_Sum <- c(
+  sapply(1:(nrow(macro_df_filtered) - 3), 
+         function(i) sum(macro_df_filtered$GDD_Inf_R[i:(i + 3)])), 
+  rep(NA, 3)  
+)
+
+# Calculating growth rate as the percentage of current year's Real gross value added Information over the previous year's Real gross value added Information
+macro_df_filtered$GDD_Inf_R_y <- c(rep(NA, 4), 
+                                   sapply(5:nrow(macro_df_filtered), 
+                                          function(i) {
+  previous_year_sum <- sum(macro_df_filtered$GDD_Inf_R[(i - 4):(i - 1)]) 
+  current_year_sum <- sum(macro_df_filtered$GDD_Inf_R[(i):(i + 3)])      
+  growth_rate <- (current_year_sum / previous_year_sum - 1) * 100
+  return(round(growth_rate, 3))  
+}))
+```
+
+```{r}
+# Transformation of Real gross value added for Real estate variable
+# Calculating yearly Real gross value added for Real estate sum (sum of every 4 quarters)
+macro_df_filtered$Yearly_GDD_Est_R_Sum <- c(
+  sapply(1:(nrow(macro_df_filtered) - 3), 
+         function(i) sum(macro_df_filtered$GDD_Est_R[i:(i + 3)])), 
+  rep(NA, 3)
+)
+
+# Calculating growth rate as the percentage of current year's Real gross value added for Real estate over the previous year's Real gross value added for Real estate
+macro_df_filtered$GDD_Est_R_y <- c(rep(NA, 4), 
+                                   sapply(5:nrow(macro_df_filtered), 
+                                          function(i) {
+  previous_year_sum <- sum(macro_df_filtered$GDD_Est_R[(i - 4):(i - 1)]) 
+  current_year_sum <- sum(macro_df_filtered$GDD_Est_R[(i):(i + 3)])      
+  growth_rate <- (current_year_sum / previous_year_sum - 1) * 100
+  return(round(growth_rate, 3))  # Round to 3 decimal places
+}))
+```
+
+```{r}
+# Transformation of Real gross value added variable
+# Calculating yearly Real gross value added sum (sum of every 4 quarters)
+macro_df_filtered$Yearly_GDD_R_Sum <- c(
+  sapply(1:(nrow(macro_df_filtered) - 3), 
+         function(i) sum(macro_df_filtered$GDD_R[i:(i + 3)])), 
+  rep(NA, 3) 
+)
+
+# Calculating growth rate as the percentage of current year's Real gross value added over the previous year's Real gross value added
+macro_df_filtered$GDD_R_y <- c(rep(NA, 4), 
+                               sapply(5:nrow(macro_df_filtered), 
+                                      function(i) {
+  previous_year_sum <- sum(macro_df_filtered$GDD_R[(i - 4):(i - 1)])
+  current_year_sum <- sum(macro_df_filtered$GDD_R[(i):(i + 3)]) 
+  growth_rate <- (current_year_sum / previous_year_sum - 1) * 100
+  return(round(growth_rate, 3)) 
+}))
+```
+
+```{r}
+# Transformation of Real population average monthly income variable
+# Calculating yearly Real population average monthly income sum (sum of every 4 quarters)
+macro_df_filtered$Yearly_Rincpop_q_Sum <- c(
+  sapply(1:(nrow(macro_df_filtered) - 3), 
+         function(i) sum(macro_df_filtered$Rincpop_q[i:(i + 3)])), 
+  rep(NA, 3)
+)
+
+# Calculating growth rate as the percentage of current year's Real population average monthly income over the previous year's Real population average monthly income
+macro_df_filtered$Rincpop_q_y <- c(rep(NA, 4), 
+                                   sapply(5:nrow(macro_df_filtered), 
+                                          function(i) {
+  previous_year_sum <- sum(macro_df_filtered$Rincpop_q[(i - 4):(i - 1)])
+  current_year_sum <- sum(macro_df_filtered$Rincpop_q[(i):(i + 3)])    
+  growth_rate <- (current_year_sum / previous_year_sum - 1) * 100
+  return(round(growth_rate, 3))  
+}))
+```
+
+```{r}
+# Transformation of Real population average monthly expenses variable
+# Calculating yearly Real population average monthly expenses sum (sum of every 4 quarters)
+macro_df_filtered$Yearly_Rexppop_q_Sum <- c(
+  sapply(1:(nrow(macro_df_filtered) - 3), 
+         function(i) sum(macro_df_filtered$Rexppop_q[i:(i + 3)])), 
+  rep(NA, 3)  
+)
+
+# Calculating growth rate as the percentage of current year's Real population average monthly expenses over the previous year's Real population average monthly expenses
+macro_df_filtered$Rexppop_q_y <- c(rep(NA, 4), 
+                                   sapply(5:nrow(macro_df_filtered), 
+                                          function(i) {
+  previous_year_sum <- sum(macro_df_filtered$Rexppop_q[(i - 4):(i - 1)]) 
+  current_year_sum <- sum(macro_df_filtered$Rexppop_q[(i):(i + 3)])    
+  growth_rate <- (current_year_sum / previous_year_sum - 1) * 100
+  return(round(growth_rate, 3))  
+}))
+```
+
+```{r}
+# Transformation of Real population average monthly wage variable
+# Calculating yearly Real population average monthly wage sum (sum of every 4 quarters)
+macro_df_filtered$Yearly_Rwage_q_Sum <- c(
+  sapply(1:(nrow(macro_df_filtered) - 3), 
+         function(i) sum(macro_df_filtered$Rwage_q[i:(i + 3)])), 
+  rep(NA, 3)  
+)
+
+# Calculating growth rate as the percentage of current year's Real population average monthly wage over the previous year's Real population average monthly wage
+macro_df_filtered$Rwage_q_y <- c(rep(NA, 4), 
+                                 sapply(5:nrow(macro_df_filtered), 
+                                        function(i) {
+  previous_year_sum <- sum(macro_df_filtered$Rwage_q[(i - 4):(i - 1)]) 
+  current_year_sum <- sum(macro_df_filtered$Rwage_q[(i):(i + 3)])     
+  growth_rate <- (current_year_sum / previous_year_sum - 1) * 100
+  return(round(growth_rate, 3))  
+}))
+```
+
+```{r}
+# Transformation of Inflation variable
+# Calculating quarterly growth of Inflation
+macro_df_filtered$cpi_q <- c(NA, diff(macro_df_filtered$cpi) / 
+                               head(macro_df_filtered$cpi, -1) * 100)
+
+# Calculating yearly growth of Inflation
+macro_df_filtered$cpi_y <- c(rep(NA, 4), 
+                             sapply(5:nrow(macro_df_filtered), 
+                                    function(i) {
+  yearly_growth <- (macro_df_filtered$cpi[i] - macro_df_filtered$cpi[i - 4]) / 
+    macro_df_filtered$cpi[i - 4] * 100
+  return(round(yearly_growth, 2))  # Round to 2 decimal places
+}))
+```
+
+```{r}
+# Checking the macroeconomic variables data frame
+str(macro_df_filtered)
+```
+**Findings:** New macroeconomic variables have been added to the data frame as a result of transforming the quarterly data into yearly values, eliminating the increasing and decreasing trends.
+
+```{r}
+# Filtering macroeconomic data frame to exclude not transformed variables
+macro_df_cleaned <- macro_df_filtered %>% 
+  dplyr:: select(-real_gdp, -GDD_Agr_R, -GDD_Min_R, 
+                 -GDD_Man_R, -GDD_Elc_R, 
+                 -GDD_Con_R, -GDD_Trd_R, -GDD_Trn_R, 
+                 -GDD_Inf_R, -GDD_Est_R, -GDD_R, 
+                 -Rincpop_q, -Rexppop_q, -Rwage_q, 
+                 -govsec_rate_kzt_1y, -Yearly_GDP_Sum,
+                 -Yearly_GDD_Agr_R_Sum, -Yearly_GDD_Min_R_Sum, 
+                 -Yearly_GDD_Man_R_Sum, -Yearly_GDD_Elc_R_Sum,
+                 -Yearly_GDD_Con_R_Sum, -Yearly_GDD_Trd_R_Sum, 
+                 -Yearly_GDD_Trn_R_Sum, -Yearly_GDD_Inf_R_Sum,
+                 -Yearly_GDD_Est_R_Sum, -Yearly_GDD_R_Sum, 
+                 -Yearly_Rincpop_q_Sum, -Yearly_Rexppop_q_Sum, 
+                 -Yearly_Rwage_q_Sum)
+```
+
+```{r}
+# Checking cleaned data frame
+str(macro_df_cleaned)
+```
+**Findings:** There are 21 transformed variables in the macroeconomic data frame.
+
+### Creating the Final Data Frame for Modeling
+
+#### Processing the Total Operational Risk Losses Data Frame
+
+```{r}
+# Checking Total Operational Risk Losses data frame
+str(or_losses_total)
+```
+**Findings:** The data in the Total Operational Risk Losses data frame covers the period from Q1-2007 to Q4-2016. However, the available macroeconomic variables span from Q1-2010 to Q1-2024.
+To align both datasets, the Total Operational Risk Losses data frame and the macroeconomic variables data frame will be truncated to the period from Q1-2011 to Q4-2016.
+
+```{r}
+# Converting 'Year_Quarter' to a date for comparison
+or_losses_total$Year_Quarter <- as.character(or_losses_total$Year_Quarter)
+
+# Filtering the data from 2016 Q1 onwards
+or_losses_filtered <- or_losses_total %>%
+  filter(Year_Quarter >= "2011-Q1")
+```
+
+```{r}
+# Checking the filtered data
+head(or_losses_filtered)
+tail(or_losses_filtered)
+```
+```{r}
+# Converting Quarter to Date (assuming the first day of each quarter)
+# Extracting Year and Quarter from Year_Quarter
+or_losses_filtered$Year <- substr(or_losses_filtered$Year_Quarter, 1, 4)
+or_losses_filtered$Quarter <- substr(or_losses_filtered$Year_Quarter, 6, 7)
+or_losses_filtered$Date_2 <- as.Date(paste0(or_losses_filtered$Year, "-", 
+                                            case_when(
+                                              or_losses_filtered$Quarter == "Q1" ~ "01",
+                                              or_losses_filtered$Quarter == "Q2" ~ "04",
+                                              or_losses_filtered$Quarter == "Q3" ~ "07",
+                                              or_losses_filtered$Quarter == "Q4" ~ "10"
+                                            ), "-01"), format="%Y-%m-%d")
+
+# Checking the result
+head(or_losses_filtered)
+```
+```{r}
+# Defining the KZT/USD exchange rates for each year
+usd_kzt_exchange_rates <- c(
+  `2016` = 342.16,
+  `2015` = 221.73,
+  `2014` = 179.19,
+  `2013` = 152.13,
+  `2012` = 149.11,
+  `2011` = 146.62,
+  `2010` = 147.35
+)
+
+# Defining function to convert Operational Risk Losses to KZT based on the year
+convert_to_kzt <- function(year, value) {
+  exchange_rate <- usd_kzt_exchange_rates[as.character(year)]
+  if (!is.null(exchange_rate)) {
+    return(value * exchange_rate)
+  } else {
+    return(NA)
+  }
+}
+
+# Appling the conversion for each relevant column
+or_losses_filtered$Total_loss_1_KZT <- mapply(convert_to_kzt, 
+                                              as.numeric(format(or_losses_filtered$Date_2, 
+                                                                "%Y")), 
+                                              or_losses_filtered$Total_Loss_1)
+
+or_losses_filtered$Total_loss_2_KZT <- mapply(convert_to_kzt, 
+                                              as.numeric(format(or_losses_filtered$Date_2, 
+                                                                "%Y")), 
+                                              or_losses_filtered$Total_Loss_2)
+
+or_losses_filtered$Total_loss_3_KZT <- mapply(convert_to_kzt, 
+                                              as.numeric(format(or_losses_filtered$Date_2, 
+                                                                "%Y")), 
+                                              or_losses_filtered$Total_Loss_3)
+
+or_losses_filtered$Total_loss_4_KZT <- mapply(convert_to_kzt, 
+                                              as.numeric(format(or_losses_filtered$Date_2, 
+                                                                "%Y")), 
+                                              or_losses_filtered$Total_Loss_4)
+
+or_losses_filtered$Total_or_losses_KZT <- mapply(convert_to_kzt, 
+                                                 as.numeric(format(or_losses_filtered$Date_2, 
+                                                                   "%Y")), 
+                                                 or_losses_filtered$Total_or_losses)
+
+```
+
+```{r}
+# Checking the first few rows of the updated data frame
+head(or_losses_filtered)
+tail(or_losses_filtered)
+```
+#### Processing Banking statistics data frame
+
+```{r}
+# Converting the 'Date' column to Date format
+banking_stats_filtered$Date <- as.Date(banking_stats_filtered$Date)
+
+# Defining the date range for filtering
+start_date <- as.Date("2011-03-01")
+end_date <- as.Date("2016-12-01")
+
+# Filtering the data between the specified range
+banking_stats_filtered_filtered <- banking_stats_filtered %>%
+  filter(Date >= start_date & Date <= end_date)
+```
+
+```{r}
+# Checking the first and last few rows of the filtered data
+head(banking_stats_filtered_filtered)
+tail(banking_stats_filtered_filtered)
+```
+
+```{r}
+# Creating comdined data frame of banking statistics
+bank_x <- cbind(banking_stats_filtered_filtered, or_losses_filtered)
+```
+
+```{r}
+# Checking combined data frame
+str(bank_x)
+head(bank_x)
+tail(bank_x)
+```
+
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+bank_x$Date <- as.factor(bank_x$Date)
+
+p <- ggplot(bank_x, aes(x = Date)) +
+  geom_line(aes(y = Value / 1000000000, color = "Total Assets"), 
+            linewidth = 1, group = 1) +
+  geom_point(aes(y = Value / 1000000000, color = "Total Assets"), 
+             size = 3) +
+  geom_line(aes(y = (Total_or_losses_KZT / 1000) * scale_factor, 
+                color = "Total Losses"), linewidth = 1, group = 1) +
+  geom_point(aes(y = (Total_or_losses_KZT / 1000) * scale_factor, 
+                 color = "Total Losses"), size = 3) +
+  
+  scale_color_manual(values = c("Total Assets" = "blue", 
+                                "Total Losses" = "red")) +
+  scale_y_continuous(
+    name = "Total Assets (Billion KZT)",  
+    labels = comma,
+    sec.axis = sec_axis(
+      ~ . / scale_factor, 
+      name = "Total Losses (Thousands KZT)", 
+      labels = comma
+    )
+  ) +
+  labs(
+    title = "Comparison of Total Assets to Operational Risk Losses",
+    x = "Yearly",
+    color = ""
+  ) +
+  theme_minimal() +
+  theme(
+    axis.title.y.left = element_text(color = "blue"),
+    axis.text.y.left = element_text(color = "blue"),
+    axis.title.y.right = element_text(color = "red"),
+    axis.text.y.right = element_text(color = "red"),
+    legend.position = "top",
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+scale_factor <- max(bank_x$Value / 1000000000) / 
+  max(bank_x$Total_or_losses_KZT / 1000)
+
+print(p)
+```
+**Findings:** Despite the rapid fluctuations in Operational Risk Losses, there is an increasing trend observed in the data since 2015. However, it is important to note that the data on Operational Risk Losses is sourced from the open "OpVaR" package for R and is not specific to the Kazakhstan banking system. Therefore, it does not reflect the actual Operational Risk exposure of Kazakhstan’s banks.
+
+#### Data preprocessing
+
+The data for Operational Risk Losses is expressed in KZT millions, while the data for macroeconomic variables is in KZT trillions. If these values are input into the Regression Model without being standardized to comparable units, it will result in incorrect calculations.
+To address this, the dependent variable will be expressed as the share (portion) of Total Operational Risk Losses relative to the Total Assets of bank "X" for the Linear Regression Model.
+
+```{r}
+# Calculation of share (portion) of Total Operational Risk Losses in Total Assets of the bank "X"
+bank_x$OR_Loss_in_assets <- bank_x$Total_or_losses_KZT / bank_x$Value
+bank_x$OR_Loss_1_in_assets <- bank_x$Total_loss_1_KZT / bank_x$Value
+bank_x$OR_Loss_2_in_assets <- bank_x$Total_loss_2_KZT / bank_x$Value
+bank_x$OR_Loss_3_in_assets <- bank_x$Total_loss_3_KZT / bank_x$Value
+bank_x$OR_Loss_4_in_assets <- bank_x$Total_loss_4_KZT / bank_x$Value
+```
+
+```{r}
+# Checking data frame
+head(bank_x)
+```
+
+```{r}
+# Checking macroeconomic variables data frame
+head(macro_df_cleaned)
+tail(macro_df_cleaned)
+```
+```{r}
+# Filtering macroeconomic data for the period 2011-04-01 and 2017-01-01
+macro_df_final <- macro_df_cleaned %>%
+  filter(time_period >= as.Date("2011-04-01") & 
+           time_period <= as.Date("2017-01-01")) %>% 
+  dplyr:: select(time_period, everything())
+```
+
+```{r}
+# Checking macroeconomic variables data frame
+head(macro_df_final)
+tail(macro_df_final)
+```
+```{r}
+# Creating combined data frame of macroeconomic variables and banking statistics
+model_data <- cbind(macro_df_final, bank_x)
+str(model_data)
+```
+```{r}
+# Checking for missing values
+cat("\nMissing values per column:\n")
+missing_values <- colSums(is.na(model_data))
+print(missing_values)
+
+# Checking for duplicated rows
+cat("\nDuplicated rows:\n")
+duplicated_rows <- model_data[duplicated(model_data), ]
+if (nrow(duplicated_rows) > 0) {
+  print(duplicated_rows)
+} else {
+  cat("No duplicated rows found.\n")
+}
+```
+**Findings:** There are no missing or duplicated values in the data frame for modelling.
+
+
+## Model Construction
+
+
+
+### Multiple Linear Regression Model Construction
+
+The Multiple Linear Regression Model will be used for stress-testing Operational Risk. The R programming code will automatically select the optimal parameters by iterating through generated pairs of independent variables (regressors). Statistical tests for multicollinearity, stationarity, and statistical significance will be applied to ensure the robustness of the model.
+
+```{r}
+final_df <- as.data.frame(model_data)
+```
+#### Hypothesis Formulation:
+Null Hypothesis (H₀): The macroeconomic variables are not related to Operational Risk Losses.
+Alternative Hypothesis (Hₐ): The macroeconomic variables are related to Operational Risk Losses.
+The alpha level is set to 0.1 (90% confidence level), and the acceptable R² (Coefficient of Determination) threshold is set to 0.35 (35%).
+
+```{r warning=FALSE}
+# Function to check stationarity and significance for Model 1
+check_stationarity_significance_model_1 <- function(X, y) {
+  X <- as.data.frame(cbind(1, X))  
+  colnames(X)[1] <- "(Intercept)"  
+  model1 <- lm(y ~ ., data = X)  
+  p_values <- summary(model1)$coefficients[, 4][-1]  
+  adf_test <- adf.test(resid(model1)) 
+  return(list(p_values = p_values, adf_test = adf_test))
+}
+
+# Function to calculate Variance Inflation Factor (VIF) for Model 1
+calculate_vif_model_1 <- function(X, y) {
+  
+  data <- as.data.frame(cbind(X, y = y))
+  vif_data <- vif(lm(y ~ ., data = data))
+  return(data.frame(feature = names(vif_data), 
+                    VIF = vif_data))
+}
+
+# Function to find the best model for Model 1 based on feature combinations
+find_best_model_model_1 <- function(final_df) {
+
+  excluded_columns <- c("time_period", "Year_Quarter", 
+                        "Date", "Date_2", "Value",
+                        "Total_Loss_1", "Total_Loss_2", 
+                        "Total_Loss_3", "Total_Loss_4",
+                        "OR_Loss_in_assets", "Value_billion", 
+                        "Total_or_losses",
+                        "Total_or_losses_KZT", "Total_loss_1_KZT", 
+                        "Total_loss_2_KZT",
+                        "Total_loss_3_KZT", "Total_loss_4_KZT", 
+                        "OR_Loss_1_in_assets",
+                        "OR_Loss_2_in_assets", "OR_Loss_3_in_assets", 
+                        "OR_Loss_4_in_assets", "Year", "Quarter")
+  X <- final_df[, !colnames(final_df) %in% excluded_columns]
+  y <- final_df$OR_Loss_in_assets
+  
+  best_r2 <- -Inf
+  best_model1 <- NULL
+  best_features1 <- NULL
+  valid_combinations <- 0 
+  total_combinations <- choose(ncol(X), 3)
+  combination_count <- 0
+  
+  # Generating combinations of 3 independent variables
+  combinations <- combn(names(X), 3, simplify = FALSE)
+  
+  # Initializing a list to store valid combinations that passed tests
+  valid_combinations_list <- list()
+
+  for (i in 1:length(combinations)) {
+    combination_count <- combination_count + 1
+    selected_features <- X[, combinations[[i]], drop = FALSE] 
+    
+    # Checking stationarity and significance for Model 1
+    test_result <- check_stationarity_significance_model_1(selected_features, 
+                                                           y)
+    p_values <- test_result$p_values
+    adf_test <- test_result$adf_test
+    
+    # Skipping combinations that don't pass the statistical tests
+    if (any(p_values > 0.1) || adf_test$p.value > 0.1) {
+      next  # Skip this combination
+    }
+    
+    # Checking VIF for Model 1
+    vif_test <- calculate_vif_model_1(selected_features, y)
+    if (max(vif_test$VIF) > 10) {
+      next  # Skip this combination
+    }
+
+    # Fitting the model for Model 1
+    selected_features <- as.data.frame(cbind(1, selected_features))  
+    colnames(selected_features)[1] <- "(Intercept)"  
+    model1 <- lm(y ~ ., data = selected_features)  
+    r2 <- summary(model1)$r.squared
+    
+    # Checking if this model is the best
+    if (r2 > best_r2) {
+      best_r2 <- r2
+      best_model1 <- model1
+      best_features1 <- combinations[[i]]
+    }
+    
+    # Adding valid combination to the list
+    valid_combinations <- valid_combinations + 1
+    valid_combinations_list[[valid_combinations]] <- list(
+      combination = combinations[[i]],
+      p_values = p_values,
+      adf_p_value = adf_test$p.value,
+      r2 = r2
+    )
+  }
+  
+  # Returning the best model, best features, and valid combinations
+  return(list(best_model1 = best_model1, 
+              best_features1 = best_features1,
+              best_r2 = best_r2,
+              valid_combinations_list = valid_combinations_list,
+              valid_combinations = valid_combinations,
+              total_combinations = total_combinations))
+}
+
+# Finding the best model for Model 1
+best_result_1 <- find_best_model_model_1(final_df)
+best_model_1 <- best_result_1$best_model1
+best_features_1 <- best_result_1$best_features1
+valid_combinations_list <- best_result_1$valid_combinations_list
+valid_combinations <- best_result_1$valid_combinations
+total_combinations <- best_result_1$total_combinations
+
+# Printing the results
+cat("Total number of combinations:", total_combinations, "\n")
+cat("Number of valid combinations that passed the statistical tests:", 
+    valid_combinations, "\n")
+
+# Printing each valid combination with its details
+cat("Valid combinations that passed the statistical tests:\n")
+for (i in 1:length(valid_combinations_list)) {
+  cat("Combination", i, ":", paste(valid_combinations_list[[i]]$combination, 
+                                   collapse = ", "), "\n")
+  cat("p-values: ", paste(valid_combinations_list[[i]]$p_values, 
+                          collapse = ", "), "\n")
+  cat("ADF test p-value: ", valid_combinations_list[[i]]$adf_p_value, 
+      "\n")
+  cat("R^2: ", valid_combinations_list[[i]]$r2, "\n\n")
+}
+
+# Printing the best model and features
+cat("Best independent variables for Model 1:", 
+    paste(best_features_1, collapse = ", "), "\n")
+cat("R^2 of the best model for Model 1:", best_result_1$best_r2, 
+    "\n")
+print(summary(best_model_1))
+
+```
+
+**Findings:** The best Multiple Linear Regression model for predicting the amounts (impact/severity) of Operational Risk Losses was selected using the following macroeconomic variables:
+GDD_Trn_R_y (Real gross value added - Transportation),
+GDD_Inf_R_y (Real gross value added - Information),
+Rincpop_q_y (Real population average monthly income).
+
+The R² (Coefficient of Determination) is 0.44, and the Adjusted R-squared is 0.36. The p-values for the variables are below the alpha level of 0.1.
+Thus, the Null Hypothesis is rejected, and the Alternative Hypothesis is accepted, indicating that the macroeconomic variables have relationships with the frequency (number) of Operational Risk Losses.
+
+#### Checking Modelling Assumptions for Multiple Linear Regression Model
+
+```{r}
+# Multiple linear regression model construction
+mfl_model_or <- lm(OR_Loss_in_assets ~ GDD_Trn_R_y + GDD_Inf_R_y + Rincpop_q_y, data = model_data)
+summary(mfl_model_or)
+```
+#### Creating correlation matrix
+
+```{r}
+kendall_corr <- model_data %>% 
+  dplyr:: select(GDD_Trn_R_y, GDD_Inf_R_y, Rincpop_q_y, OR_Loss_in_assets)
+
+# Calculating Kendall's correlation matrix
+kendall_corr1 <- cor(kendall_corr, method = "kendall", 
+                    use = "complete.obs")
+print(kendall_corr1)
+```
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Visualization Kendall's correlation matrix by correlation plot
+col <- colorRampPalette(c("#BB4444", "#EE9988", "#FFFFFF", 
+                          "#77AADD", "#4477AA"))
+corrplot(kendall_corr1, method = "color", col = col(200),
+         type = "upper", order = "hclust",
+         addCoef.col = "black", 
+         tl.col = "black", tl.srt = 45,
+         
+)
+```
+**Findings:** The analysis of correlation between the independent and dependent variables reveals a moderate negative correlation. This suggests an inverse relationship between the macroeconomic variables (independent variables) and Operational Risk Losses (dependent variable), indicating that as certain macroeconomic indicators increase, the corresponding Operational Risk Losses tend to decrease, and vice versa. This finding will be important for interpreting the model results and understanding the dynamics between macroeconomic factors and Operational Risk Losses.
+
+#### Linearity Assumption
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Creating a scatterplot for each independent variable and the dependent variable
+ggplot(data = model_data, aes(x = GDD_Trn_R_y, y = OR_Loss_in_assets)) +
+  geom_point() + 
+  stat_smooth(method = "lm", col = "red") +
+  labs(title = "Scatterplot of GDD_Trn_R_y vs. OR_Loss_in_assets", 
+       x = "GDD_Trn_R_y", y = "OR_Loss_in_assets") +
+  theme_minimal()
+```
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Creating a scatterplot for each independent variable and the dependent variable
+ggplot(data = model_data, aes(x = GDD_Inf_R_y, y = OR_Loss_in_assets)) +
+  geom_point() + 
+  stat_smooth(method = "lm", col = "green") +
+  labs(title = "Scatterplot of GDD_Inf_R_y vs. OR_Loss_in_assets", 
+       x = "GDD_Inf_R_y", y = "OR_Loss_in_assets") +
+  theme_minimal()
+```
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Creating a scatterplot for each independent variable and the dependent variable
+ggplot(data = model_data, aes(x = Rincpop_q_y, y = OR_Loss_in_assets)) +
+  geom_point() + 
+  stat_smooth(method = "lm", col = "blue") +
+  labs(title = "Scatterplot of Rincpop_q_y vs. OR_Loss_in_assets", 
+       x = "Rincpop_q_y", y = "OR_Loss_in_assets") +
+  theme_minimal()
+```
+**Findings:** It is difficult to confirm the presence of linear relationships between the independent and dependent variables. The linearity assumption assumes that the relationship between predictors (macroeconomic variables) and the response variable (Operational Risk Losses) is linear. If this assumption is violated, the model may fail to capture the true relationship, resulting in biased or inefficient predictions. In the context of Operational Risk forecasting, where the relationships between macroeconomic factors and risk losses are likely complex, ignoring non-linear relationships can lead to inaccurate risk assessments. Stress testing based on linear models in such cases may produce misleading conclusions about the potential impact or severity of Operational Risk Losses, affecting decision-making and risk management strategies.
+
+#### Normality Assumption
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Calculating model residuals
+residuals <- resid(mfl_model_or)
+
+# Creating a 1x2 grid of plots (histogram and Q-Q plot)
+par(mfrow = c(1, 2), mar = c(5, 4, 4, 2))
+
+# Histogram of residuals with adjusted bins and axis formatting
+hist(
+  residuals,
+  breaks = 5,  # Increase the number of bins
+  main = "Histogram of Residuals",
+  xlab = "Residual Value",
+  col = "lightblue",
+  border = "black",
+  xaxt = "n"
+)
+
+# Customize x-axis to remove scientific notation
+axis(1, at = pretty(residuals), labels = format(pretty(residuals), 
+                                                scientific = FALSE))
+
+# Q-Q plot of residuals
+qqnorm(residuals, main = "Normal Q-Q Plot")
+qqline(residuals, col = "red")
+
+# Reset plotting layout to default
+par(mfrow = c(1, 1))
+```
+**Findings:** The histogram of the residuals shows a distribution that does not appear to be normally distributed, with noticeable gaps in the residuals' distribution. This observation confirms that the normality assumption is not met for this model. Additionally, the Q-Q plot does not follow a straight line, further indicating that the normality assumption is violated.
+The normality assumption is crucial, particularly for statistical inference, including hypothesis testing and confidence intervals. When the residuals are not normally distributed, the accuracy of p-values and confidence intervals can be compromised. If the normality assumption is violated, the model's ability to reliably predict Operational Risks could be affected, especially in cases where uncertainty (such as constructing prediction intervals) needs to be quantified. While the model may still provide useful predictions, these predictions should be approached with more caution due to the violation of the normality assumption.
+
+#### Constant Variance Assumption
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Calculating fitted values and residuals
+fitted_values <- fitted(mfl_model_or)
+residuals <- resid(mfl_model_or)
+
+# Creating a scatterplot of fitted values vs residuals
+plot(fitted_values, residuals, 
+     xlab = "Fitted Values", 
+     ylab = "Residuals", 
+     main = "Fitted Values vs Residuals", 
+     pch = 19, col = "blue")
+abline(h = 0, col = "red", lty = 2)
+```
+**Findings:** The fitted values of variance appear to be similarly distributed, which confirms that the assumption of homoscedasticity (constant variance) is met.
+
+#### No Multicollinearity Assumption
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Checking for no multicollinearity assumption
+columns <- c('GDD_Trn_R_y', 'GDD_Inf_R_y', 
+             'Rincpop_q_y', 'OR_Loss_in_assets')
+
+# Creating a pair plot for the selected columns
+ggpairs(model_data[, columns])
+
+
+# Calculating VIF for the model
+vif_result <- vif(mfl_model_or)
+
+# Converting the VIF results to a data frame
+df_vif <- data.frame(VIF = vif_result)
+df_vif
+```
+**Findings:** The Variance Inflation Factor (VIF) is less than 5, indicating low to moderate multicollinearity, which is within acceptable levels.
+
+### Multiple Poisson Model Construction
+
+#### Operational Risk Frequency (number) preprocessing
+
+#### Operational Risk Type 1
+```{r}
+# Grouping Operational Risk Type 1 by months
+or_type1_bymonths <- or_type1 %>% 
+  mutate(YearMonth = format(Date, "%Y-%m")) %>%
+  group_by(YearMonth) %>% 
+  summarise(Frequency_Monthly = n())
+print(or_type1_bymonths)
+or_type1_bymonths <- as.data.frame(or_type1_bymonths)
+head(or_type1_bymonths)
+```
+```{r}
+# Grouping and formatting as "YYYY-MM-DD" for the last day of the quarter
+or_type1_byquarters <- or_type1_bymonths %>%
+  mutate(
+    Date = ym(YearMonth),                               
+    Year = year(Date),                                
+    Quarter = quarter(Date),                            
+    EndOfQuarter = case_when(                            
+      Quarter == 1 ~ make_date(Year, 3, 31),
+      Quarter == 2 ~ make_date(Year, 6, 30),
+      Quarter == 3 ~ make_date(Year, 9, 30),
+      Quarter == 4 ~ make_date(Year, 12, 31)
+    )
+  ) %>%
+  group_by(EndOfQuarter) %>%
+  summarize(Frequency_Quarterly = sum(Frequency_Monthly), 
+            .groups = "drop")
+```
+
+```{r}
+# Checking the data
+print(or_type1_byquarters)
+head(or_type1_byquarters)
+tail(or_type1_byquarters)
+```
+
+#### Operational Risk Type 2
+
+```{r}
+# Grouping Operational Risk Type 2 by months
+or_type2_bymonths <- or_type2 %>% 
+  mutate(YearMonth = format(Date, "%Y-%m")) %>%
+  group_by(YearMonth) %>% 
+  summarise(Frequency_Monthly = n())
+print(or_type2_bymonths)
+or_type2_bymonths <- as.data.frame(or_type2_bymonths)
+head(or_type2_bymonths)
+```
+```{r}
+# Grouping and formatting as "YYYY-MM-DD" for the last day of the quarter
+or_type2_byquarters <- or_type2_bymonths %>%
+  mutate(
+    Date = ym(YearMonth),                               
+    Year = year(Date),                                  
+    Quarter = quarter(Date),                             
+    EndOfQuarter = case_when(                           
+      Quarter == 1 ~ make_date(Year, 3, 31),
+      Quarter == 2 ~ make_date(Year, 6, 30),
+      Quarter == 3 ~ make_date(Year, 9, 30),
+      Quarter == 4 ~ make_date(Year, 12, 31)
+    )
+  ) %>%
+  group_by(EndOfQuarter) %>%
+  summarize(Frequency_Quarterly = sum(Frequency_Monthly), 
+            .groups = "drop")
+or_type2_byquarters <- or_type2_byquarters %>% 
+  dplyr:: select(-EndOfQuarter)
+```
+
+```{r}
+# Checking the data
+print(or_type2_byquarters)
+head(or_type2_byquarters)
+tail(or_type2_byquarters)
+```
+#### Operational Risk Type 3
+
+```{r}
+# Grouping Operational Risk Type 3 by months
+or_type3_bymonths <- or_type3 %>% 
+  mutate(YearMonth = format(Date, "%Y-%m")) %>%
+  group_by(YearMonth) %>% 
+  summarise(Frequency_Monthly = n())
+print(or_type3_bymonths)
+or_type3_bymonths <- as.data.frame(or_type3_bymonths)
+head(or_type3_bymonths)
+```
+```{r}
+# Grouping and formatting as "YYYY-MM-DD" for the last day of the quarter
+or_type3_byquarters <- or_type3_bymonths %>%
+  mutate(
+    Date = ym(YearMonth),                                
+    Year = year(Date),                                  
+    Quarter = quarter(Date),                             
+    EndOfQuarter = case_when(                            
+      Quarter == 1 ~ make_date(Year, 3, 31),
+      Quarter == 2 ~ make_date(Year, 6, 30),
+      Quarter == 3 ~ make_date(Year, 9, 30),
+      Quarter == 4 ~ make_date(Year, 12, 31)
+    )
+  ) %>%
+  group_by(EndOfQuarter) %>%
+  summarize(Frequency_Quarterly = sum(Frequency_Monthly), 
+            .groups = "drop")
+
+or_type3_byquarters <- or_type3_byquarters %>% 
+  dplyr:: select(-EndOfQuarter)
+```
+
+```{r}
+# Checking the data
+print(or_type3_byquarters)
+head(or_type3_byquarters)
+tail(or_type3_byquarters)
+```
+#### Operational Risk Type 4
+
+```{r}
+# Grouping Operational Risk Type 4 by months
+or_type4_bymonths <- or_type4 %>% 
+  mutate(YearMonth = format(Date, "%Y-%m")) %>%
+  group_by(YearMonth) %>% 
+  summarise(Frequency_Monthly = n())
+print(or_type4_bymonths)
+or_type4_bymonths <- as.data.frame(or_type4_bymonths)
+head(or_type4_bymonths)
+```
+
+```{r}
+# Grouping and formatting as "YYYY-MM-DD" for the last day of the quarter
+or_type4_byquarters <- or_type4_bymonths %>%
+  mutate(
+    Date = ym(YearMonth),                                
+    Year = year(Date),                                   
+    Quarter = quarter(Date),                           
+    EndOfQuarter = case_when(                          
+      Quarter == 1 ~ make_date(Year, 3, 31),
+      Quarter == 2 ~ make_date(Year, 6, 30),
+      Quarter == 3 ~ make_date(Year, 9, 30),
+      Quarter == 4 ~ make_date(Year, 12, 31)
+    )
+  ) %>%
+  group_by(EndOfQuarter) %>%
+  summarize(Frequency_Quarterly = sum(Frequency_Monthly), .groups = "drop")
+
+or_type4_byquarters <- or_type4_byquarters %>% 
+  dplyr:: select(-EndOfQuarter)
+```
+
+```{r}
+# Checking the data
+print(or_type4_byquarters)
+head(or_type4_byquarters)
+tail(or_type4_byquarters)
+```
+
+### Creating combined data frame of Operational Risk Frequencies (numbers)
+
+```{r}
+# Creating combined data frame of Operational Risk Frequencies (numbers)
+freq_or_losses <- cbind(or_type1_byquarters, or_type2_byquarters, 
+                        or_type3_byquarters, or_type4_byquarters)
+colnames(freq_or_losses) <- make.unique(colnames(freq_or_losses))
+str(freq_or_losses)
+```
+```{r}
+# Creating "Total_freq" column and calculating total frequencies of all types of Operational Risks
+freq_or_losses$Total_freq <- freq_or_losses$Frequency_Quarterly + 
+  freq_or_losses$Frequency_Quarterly.1 + 
+  freq_or_losses$Frequency_Quarterly.2 + 
+  freq_or_losses$Frequency_Quarterly.3
+str(freq_or_losses)
+```
+```{r}
+# Filtering data for period Q1-2011 to Q4-2016
+freq_or_losses_filtered <- freq_or_losses %>%
+  filter(EndOfQuarter >= as.Date("2011-03-31") & 
+           EndOfQuarter <= as.Date("2016-12-31"))
+head(freq_or_losses_filtered)
+tail(freq_or_losses_filtered)
+
+freq_model_data <- cbind(model_data, freq_or_losses_filtered)
+```
+### MULTIPLE POISSON REGRESSION MODEL 
+
+The Multiple Poisson Regression Model will be applied for stress-testing Operational Risk using R programming. The model will automatically select the best parameters by iterating through generated pairs of independent variables (regressors). Statistical tests for multicollinearity, stationarity, and statistical significance will be applied during this process.
+
+```{r}
+freq_final_df <-as.data.frame(freq_model_data)
+```
+#### Hypothesis Formulation:
+Null Hypothesis (H0): The macroeconomic variables do not have relationships with Operational Risk Losses.
+Alternative Hypothesis (Ha): The macroeconomic variables have relationships with Operational Risk Losses.
+Setting alpha level = 0.1 (90% confidence level).
+Setting acceptable Pseudo R² (Coefficient of determination) = 0.35 (35%).
+
+
+```{r warning=FALSE}
+# Function to check stationarity and significance for Model 2 using Poisson regression
+check_stationarity_significance_model_2 <- function(X, y) {
+  # Add constant for the intercept
+  X <- as.data.frame(cbind(1, X))  
+  colnames(X)[1] <- "(Intercept)"  
+  model2 <- glm(y ~ ., data = X, family = poisson()) 
+  p_values <- summary(model2)$coefficients[, 4][-1] 
+  adf_test <- adf.test(resid(model2)) 
+  return(list(p_values = p_values, adf_test = adf_test))
+}
+
+# Function to calculate Variance Inflation Factor (VIF) for Model 2 using Poisson regression
+calculate_vif_model_2 <- function(X, y) {
+  
+  data <- as.data.frame(cbind(X, y = y))
+  vif_data <- vif(glm(y ~ ., data = data, family = poisson()))
+  return(data.frame(feature = names(vif_data), VIF = vif_data))
+}
+
+# Function to find the best model for Model 2 based on feature combinations (Poisson regression)
+find_best_model_model_2 <- function(freq_final_df) {
+  
+  excluded_columns <- c("time_period", "Year_Quarter", 
+                        "Date", "Date_2", "Value",
+                        "Total_Loss_1", "Total_Loss_2", 
+                        "Total_Loss_3", "Total_Loss_4",
+                        "OR_Loss_in_assets", "Value_billion", 
+                        "Total_or_losses",
+                        "Total_or_losses_KZT", "Total_loss_1_KZT", 
+                        "Total_loss_2_KZT",
+                        "Total_loss_3_KZT", "Total_loss_4_KZT", 
+                        "OR_Loss_1_in_assets",
+                        "OR_Loss_2_in_assets", "OR_Loss_3_in_assets", 
+                        "OR_Loss_4_in_assets", 
+                        "Year", "EndOfQuarter", "Quarter", 
+                        "Frequency_Quarterly", 
+                        "Frequency_Quarterly.1", "Frequency_Quarterly.2",
+                        "Frequency_Quarterly.3", "Total_freq")
+  X <- freq_final_df[, !colnames(freq_final_df) %in% excluded_columns]
+  y <- freq_final_df$Total_freq
+  
+  best_deviance <- Inf  
+  best_model2 <- NULL
+  best_features2 <- NULL
+  total_combinations <- choose(ncol(X), 3)  
+  combination_count <- 0
+  
+  # Generating combinations of 3 independent variables
+  combinations <- combn(names(X), 3, simplify = FALSE)
+  
+  # Initializing a list to store valid combinations that passed tests
+  valid_combinations_list <- list()
+
+  for (i in 1:length(combinations)) {
+    combination_count <- combination_count + 1
+    selected_features <- X[, combinations[[i]], drop = FALSE]  
+    
+    # Checking stationarity and significance for Model 2
+    test_result <- check_stationarity_significance_model_2(selected_features, y)
+    p_values <- test_result$p_values
+    adf_test <- test_result$adf_test
+    
+    # Skipping combinations that don't pass the statistical tests
+    if (any(p_values > 0.1) || adf_test$p.value > 0.1) {
+      next  
+    }
+    
+    # Checking VIF for Model 2
+    vif_test <- calculate_vif_model_2(selected_features, y)
+    if (max(vif_test$VIF) > 10) {
+      next  
+    }
+    
+    # Fitting the Poisson regression model for Model 2
+    selected_features <- as.data.frame(cbind(1, selected_features))  
+    colnames(selected_features)[1] <- "(Intercept)" 
+    model2 <- glm(y ~ ., data = selected_features, family = poisson())
+    deviance <- model2$deviance
+    
+    # Checking if this model is the best (lowest deviance)
+    if (deviance < best_deviance) {
+      best_deviance <- deviance
+      best_model2 <- model2
+      best_features2 <- combinations[[i]]
+    }
+    
+    # Adding valid combination to the list
+    valid_combinations_list[[length(valid_combinations_list) + 1]] <- list(
+      combination = combinations[[i]],
+      p_values = p_values,
+      adf_p_value = adf_test$p.value,
+      deviance = deviance
+    )
+  }
+  
+  # Returning the best model, best features, and valid combinations
+  return(list(best_model2 = best_model2, 
+              best_features2 = best_features2,
+              best_deviance = best_deviance,
+              valid_combinations_list = valid_combinations_list,
+              valid_combinations = length(valid_combinations_list),
+              total_combinations = total_combinations))
+}
+
+# Finding the best model for Model 2
+best_result_2 <- find_best_model_model_2(freq_final_df)
+best_model_2 <- best_result_2$best_model2
+best_features_2 <- best_result_2$best_features2
+valid_combinations_list <- best_result_2$valid_combinations_list
+valid_combinations <- best_result_2$valid_combinations
+total_combinations <- best_result_2$total_combinations
+
+# Printing the results
+cat("Total number of combinations:", total_combinations, "\n")
+cat("Number of valid combinations that passed the statistical tests:", 
+    valid_combinations, "\n")
+
+# Printing each valid combination with its details
+cat("Valid combinations that passed the statistical tests:\n")
+for (i in 1:length(valid_combinations_list)) {
+  cat("Combination", i, ":", paste(valid_combinations_list[[i]]$combination, 
+                                   collapse = ", "), 
+      "\n")
+  cat("p-values: ", paste(valid_combinations_list[[i]]$p_values, 
+                          collapse = ", "), 
+      "\n")
+  cat("ADF test p-value: ", valid_combinations_list[[i]]$adf_p_value, 
+      "\n")
+  cat("Deviance: ", valid_combinations_list[[i]]$deviance, 
+      "\n\n")
+}
+
+# Printing the best model and features
+cat("Best independent variables for Model 2:", 
+    paste(best_features_2, collapse = ", "), "\n")
+cat("Deviance of the best model for Model 2:", 
+    best_result_2$best_deviance, "\n")
+print(summary(best_model_2))
+
+```
+**Findings:** The best Multiple Poisson Regression model for the frequency (number) of Operational Risk Losses was selected with the following macroeconomic variables:
+rurkzt: RUB/KZT exchange rate,
+Rincpop_q_y: Real population average monthly income,
+Rexppop_q_y: Real population average monthly expenses.
+
+The model's goodness of fit is indicated by:
+r²ML (Maximum-likelihood pseudo-R²) = 0.4754,
+r²CU (Cragg-Uhler/Nagelkerke pseudo-R²) = 0.4755,
+Both metrics suggest a strong fit, explaining approximately 47.5% of the variation in the frequency of Operational Risk Losses. Additionally, all p-values are below the alpha threshold of 0.1.
+
+Thus, the Null Hypothesis is rejected and the Alternative Hypothesis is accepted. This indicates that the macroeconomic variables have significant relationships with the frequency (number) of Operational Risk Losses.
+
+#### Checking Modelling Assumptions of Multiple Poisson Regression Model
+
+```{r}
+# Multiple Poisson regression model construction
+X <- freq_final_df
+y <- freq_final_df$Total_freq
+
+# Fitting a Poisson regression model
+mf_poiss_model <- glm(y ~ rurkzt + Rincpop_q_y + Rexppop_q_y, 
+                      data = X, family = poisson())
+
+# Calculating pseudo R-squared values
+pseudo_r2_values <- pR2(mf_poiss_model)
+
+# Printing the results
+pseudo_r2_values
+
+```
+**Findings:** McFadden's R² = 0.0767 indicates that the model explains about 7.67% of the variance relative to the null model, which suggests some improvement in model fit but also indicates room for further enhancement. On the other hand, the r2ML (Maximum-likelihood pseudo-R²) = 0.4754 and r2CU (Cragg-Uhler/Nagelkerke pseudo-R²) = 0.4755 provide a more favorable indication, suggesting that approximately 47.5% of the variation in the frequency of Operational Risk Losses is explained by the selected macroeconomic variables. These latter metrics suggest a better overall fit of the model.
+
+#### Creating correlation matrix
+
+```{r}
+kendall_corr2 <- freq_final_df %>% 
+  dplyr:: select(rurkzt , Rincpop_q_y, Rexppop_q_y, Total_freq)
+
+# Calculating Kendall's correlation matrix
+kendall_corr2 <- cor(kendall_corr2, method = "kendall", 
+                    use = "complete.obs")
+print(kendall_corr2)
+```
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Visualization Kendall's correlation matrix by correlation plot
+col <- colorRampPalette(c("#BB4444", "#EE9988", "#FFFFFF", 
+                          "#77AADD", "#4477AA"))
+corrplot(kendall_corr2, method = "color", col = col(200),
+         type = "upper", order = "hclust",
+         addCoef.col = "black", 
+         tl.col = "black", tl.srt = 45,
+         
+)
+```
+**Findings:**  The independent and dependent variables exhibit moderate negative correlations. This suggests that as some macroeconomic variables increase, the frequency or severity of Operational Risk Losses tends to decrease, or vice versa. While the correlation is not strong enough to infer a direct causal relationship, it indicates a moderate inverse relationship that may require further investigation or refinement in the model for more precise predictions.
+
+
+#### Linearity Assumption
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Creating a scatterplot for each independent variable and the dependent variable
+ggplot(data = freq_final_df, aes(x = Rincpop_q_y, y = Total_freq)) +
+  geom_point() + 
+  stat_smooth(method = "lm", col = "red") +
+  labs(title = "Scatterplot of Rincpop_q_y vs. Total_freq", 
+       x = "Rincpop_q_y", y = "Total_freq") +
+  theme_minimal()
+```
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Creating a scatterplot for each independent variable and the dependent variable
+ggplot(data = freq_final_df, aes(x = rurkzt, y = Total_freq)) +
+  geom_point() + 
+  stat_smooth(method = "lm", col = "green") +
+  labs(title = "Scatterplot of rurkzt vs. Total_freq", 
+       x = "rurkzt", y = "Total_freq") +
+  theme_minimal()
+```
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Creating a scatterplot for each independent variable and the dependent variable
+ggplot(data = freq_final_df, aes(x = Rexppop_q_y, y = Total_freq)) +
+  geom_point() + 
+  stat_smooth(method = "lm", col = "blue") +
+  labs(title = "Scatterplot of Rexppop_q_y  vs. Total_freq", 
+       x = "Rexppop_q_y", y = "Total_freq") +
+  theme_minimal()
+```
+
+**Findings:** It is difficult to confirm the presence of linear relationships between independent and dependent variables. The linearity assumption assumes a straightforward, proportional relationship between the predictors (macroeconomic variables) and the response variable (Operational Risk Losses). If this assumption is violated, the model might fail to capture more complex, non-linear relationships, leading to biased or inefficient predictions. For Operational Risk forecasting, where macroeconomic factors may interact in complex ways with risk losses, ignoring non-linear relationships could result in inaccurate assessments. Stress testing based on a linear model in such cases may lead to misleading conclusions about the potential impact and severity of Operational Risk Losses. Further exploration into non-linear models or feature transformations might be necessary to enhance prediction accuracy.
+
+#### Independence assumption
+
+```{r}
+# Using Durbin-Watson test (requires car package)
+dwtest(mf_poiss_model)
+```
+**Findings:** The Durbin-Watson (DW) statistic is 1.9546, which is very close to 2, suggesting that there is no significant autocorrelation in the residuals of the model. The p-value of 0.304 further supports this conclusion, as it provides insufficient evidence to suggest the presence of autocorrelation. This implies that the residuals are not correlated over time, and the assumption of no autocorrelation holds, which is important for ensuring the reliability of the model's predictions.
+
+#### Poisson Distribution assumption
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Checking for Poisson Distribution assumption: Plot residuals vs. fitted values
+ggplot(data = data.frame(fitted = mf_poiss_model$fitted.values, 
+                         residuals = residuals(mf_poiss_model)), 
+       aes(x = fitted, y = residuals)) +
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+  labs(title = "Residuals vs. Fitted Values (Poisson Distribution Check)", 
+       x = "Fitted Values", y = "Residuals") +
+  theme_minimal()
+```
+**Findings:** The residuals appear randomly scattered around the horizontal line at 0 in the residual plot, indicating that the model assumptions are likely met and the model provides a good fit. This suggests that there is no obvious pattern in the residuals, which is a key indicator of a well-fitted model. This helps to confirm the validity of the model and its appropriateness for stress-testing Operational Risk Losses.
+
+#### Overdispersion assumption
+
+```{r}
+# Checking for overdispersion: Comparing the residual deviance to the degrees of freedom
+deviance <- mf_poiss_model$deviance
+df <- mf_poiss_model$df.residual
+dispersion <- deviance / df
+dispersion
+```
+**Findings:** The dispersion statistic is approximately 1, which indicates that the variance of the residuals is consistent with the assumptions of the Poisson model. This suggests that the model is appropriate for the data and that the assumptions regarding the distribution of the dependent variable (Operational Risk Losses frequency) are met. This is important for ensuring the reliability of the stress-testing results.
+
+
+#### Multicollinearity assumption
+
+```{r}
+# Checking for Multicollinearity: Variance Inflation Factor (VIF)
+vif(mf_poiss_model)
+```
+**Findings:** The VIF values are between 5 and 10, indicating moderate multicollinearity. While there is some correlation between the independent variables, the outputs remain within acceptable levels, meaning that multicollinearity is not severe enough to significantly affect the regression model's reliability or interpretation. However, it's still important to monitor and consider potential issues in further modeling or predictions.
+
+#### Normality Assumption. Goodness of fit using Pearson residuals
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Calculating model residuals
+pearson_residuals <- residuals(mf_poiss_model, type = "pearson")
+qqnorm(pearson_residuals)
+qqline(pearson_residuals)
+
+# Creating a 1x2 grid of plots (histogram and Q-Q plot)
+par(mfrow = c(1, 2), mar = c(5, 4, 4, 2))
+
+# Histogram of residuals with adjusted bins and axis formatting
+hist(
+  pearson_residuals,
+  breaks = 5,  # Increase the number of bins
+  main = "Histogram of Residuals",
+  xlab = "Residual Value",
+  col = "skyblue",
+  border = "black",
+  xaxt = "n"
+)
+
+# Customize x-axis to remove scientific notation
+axis(1, at = pretty(residuals), 
+     labels = format(pretty(residuals), 
+                                                scientific = FALSE))
+
+# Q-Q plot of residuals
+qqnorm(pearson_residuals, main = "Normal Q-Q Plot")
+qqline(pearson_residuals, col = "red")
+
+# Reset plotting layout to default
+par(mfrow = c(1, 1))
+```
+**Findings:** The histogram of the residuals appears to be normally distributed, confirming that the normality assumption is met for this model. Additionally, the residuals in the Q-Q plot form a straight line, further validating that the normality assumption holds true. This suggests that the model's residuals do not deviate significantly from a normal distribution, supporting the reliability of statistical inference such as hypothesis testing and confidence intervals.
+
+
+### Multiple Negative Binomial Model Construction
+
+The Multiple Negative Binomial Regression Model applied for the same macroeconomic variables chosen for Multiple Poisson Regression Model.
+
+```{r warning=FALSE}
+# Multiple Poisson Model Construction
+model3 <- glm.nb(Total_freq ~ rurkzt + Rincpop_q_y + Rexppop_q_y, 
+                 data = freq_final_df) 
+summary(model3)
+```
+
+**Findings:**  The results from the Multiple Negative Binomial Regression Model, when applied to the same macroeconomic variables as in the Multiple Poisson Regression Model, show similar outcomes. Both models indicate that the chosen macroeconomic variables (rurkzt - RUB KZT exchange rate, Rincpop_q_y - Real population average monthly income, Rexppop_q_y - Real population average monthly expenses) have a significant relationship with the frequency of Operational Risk Losses.
+This suggests that the Negative Binomial model, which accounts for overdispersion, yields results comparable to the Poisson model for this dataset. This similarity in results implies that there may not be significant overdispersion in the frequency of Operational Risk Losses. Consequently, both models provide reliable insights into the macroeconomic factors influencing Operational Risk Losses, with the Negative Binomial model offering a slightly more robust framework for handling potential overdispersion.
+
+### Multiple Linear Model Construction
+
+The Multiple Linear Regression Model is applied for stress-testing of Operational Risk using R programming code, which will automatically choose best parameters of the different models by iteration between generated pairs of independent variables (regressors) applying statistical test for Multicollinearity, Stationarity and Statistical Significance.
+
+#### Hypothesis Formulation:
+Null Hypothesis (H0): The macroeconomic variables do not have relationships with Operational Risk Losses.
+Alternative Hypothesis (Ha): The macroeconomic variables have relationships with Operational Risk Losses.
+Setting alpha level = 0.1 (90% confidence level).
+Setting acceptable Pseudo R² (Coefficient of determination) = 0.35 (35%).
+
+```{r warning=FALSE}
+# Function to check stationarity and significance for Model 4
+check_stationarity_significance_model_4 <- function(X, y) {
+  
+  X <- as.data.frame(cbind(1, X))  
+  colnames(X)[1] <- "(Intercept)"  
+  model4 <- lm(y ~ ., data = X)  
+  p_values <- summary(model4)$coefficients[, 4][-1]  # Exclude intercept p-value
+  adf_test <- adf.test(resid(model4))  # ADF test on residuals
+  return(list(p_values = p_values, adf_test = adf_test))
+}
+
+# Function to calculate Variance Inflation Factor (VIF) for Model 4
+calculate_vif_model_4 <- function(X, y) {
+  
+  data <- as.data.frame(cbind(X, y = y))
+  vif_data <- vif(lm(y ~ ., data = data))
+  return(data.frame(feature = names(vif_data), VIF = vif_data))
+}
+
+# Function to find the best model for Model 4 based on feature combinations
+find_best_model_model_4 <- function(freq_final_df) {
+  excluded_columns <- c("time_period", "Year_Quarter", 
+                        "Date", "Date_2", "Value",
+                        "Total_Loss_1", "Total_Loss_2", 
+                        "Total_Loss_3", "Total_Loss_4",
+                        "OR_Loss_in_assets", "Value_billion", 
+                        "Total_or_losses",
+                        "Total_or_losses_KZT", "Total_loss_1_KZT", 
+                        "Total_loss_2_KZT",
+                        "Total_loss_3_KZT", "Total_loss_4_KZT", 
+                        "OR_Loss_1_in_assets",
+                        "OR_Loss_2_in_assets", "OR_Loss_3_in_assets", 
+                        "OR_Loss_4_in_assets", 
+                        "Year", "EndOfQuarter", "Quarter", 
+                        "Frequency_Quarterly", 
+                        "Frequency_Quarterly.1", "Frequency_Quarterly.2",
+                        "Frequency_Quarterly.3", "Total_freq")
+  X <- freq_final_df[, !colnames(freq_final_df) %in% excluded_columns]
+  y <- freq_final_df$Total_freq
+  
+  best_r2 <- -Inf  
+  best_model4 <- NULL
+  best_features4 <- NULL
+  total_combinations <- choose(ncol(X), 3)  
+  combination_count <- 0
+  
+  # Generating combinations of 3 independent variables
+  combinations <- combn(names(X), 3, simplify = FALSE)
+  
+  # Initializing a list to store valid combinations that passed tests
+  valid_combinations_list <- list()
+
+  for (i in 1:length(combinations)) {
+    combination_count <- combination_count + 1
+    selected_features <- X[, combinations[[i]], drop = FALSE]  
+    
+    # Checking stationarity and significance for Model 4
+    test_result <- check_stationarity_significance_model_4(selected_features, 
+                                                           y)
+    p_values <- test_result$p_values
+    adf_test <- test_result$adf_test
+    
+    # Skipping combinations that don't pass the statistical tests
+    if (any(p_values > 0.1) || adf_test$p.value > 0.1) {
+      next  # Skip this combination
+    }
+    
+    # Checking VIF for Model 4
+    vif_test <- calculate_vif_model_4(selected_features, 
+                                      y)
+    if (max(vif_test$VIF) > 10) {
+      next  # Skip this combination
+    }
+    
+    # Fitting the model for Model 4
+    selected_features <- as.data.frame(cbind(1, 
+                                             selected_features))  
+    colnames(selected_features)[1] <- "(Intercept)"  
+    model4 <- lm(y ~ ., data = selected_features) 
+    r2 <- summary(model4)$r.squared
+    
+    # Checking if this model is the best (highest R-squared)
+    if (r2 > best_r2) {
+      best_r2 <- r2
+      best_model4 <- model4
+      best_features4 <- combinations[[i]]
+    }
+    
+    # Adding valid combination to the list
+    valid_combinations_list[[length(valid_combinations_list) + 1]] <- list(
+      combination = combinations[[i]],
+      p_values = p_values,
+      adf_p_value = adf_test$p.value,
+      r_squared = r2
+    )
+  }
+  
+  # Returning the best model, best features, and valid combinations
+  return(list(best_model4 = best_model4, 
+              best_features4 = best_features4,
+              best_r2 = best_r2,
+              valid_combinations_list = valid_combinations_list,
+              valid_combinations = length(valid_combinations_list),
+              total_combinations = total_combinations))
+}
+
+# Finding the best model for Model 4
+best_result_4 <- find_best_model_model_4(freq_final_df)
+best_model_4 <- best_result_4$best_model4
+best_features_4 <- best_result_4$best_features4
+valid_combinations_list <- best_result_4$valid_combinations_list
+valid_combinations <- best_result_4$valid_combinations
+total_combinations <- best_result_4$total_combinations
+
+# Printing the results
+cat("Total number of combinations:", total_combinations, 
+    "\n")
+cat("Number of valid combinations that passed the statistical tests:", 
+    valid_combinations, "\n")
+
+# Printing each valid combination with its details
+cat("Valid combinations that passed the statistical tests:\n")
+for (i in 1:length(valid_combinations_list)) {
+  cat("Combination", i, ":", paste(valid_combinations_list[[i]]$combination, 
+                                   collapse = ", "), 
+      "\n")
+  cat("p-values: ", paste(valid_combinations_list[[i]]$p_values, 
+                          collapse = ", "), "\n")
+  cat("ADF test p-value: ", valid_combinations_list[[i]]$adf_p_value, 
+      "\n")
+  cat("R-squared: ", valid_combinations_list[[i]]$r_squared, 
+      "\n\n")
+}
+
+# Printing the best model and features
+cat("Best independent variables for Model 4:", 
+    paste(best_features_4, collapse = ", "), "\n")
+cat("R^2 of the best model for Model 4:", 
+    best_result_4$best_r2, "\n")
+print(summary(best_model_4))
+
+```
+
+**Findings:** The Multiple Linear Regression model was applied to analyze the frequency (number) of Operational Risk Losses, using the same macroeconomic variables chosen for the Multiple Poisson Regression model:
+rurkzt: RUB KZT exchange rate,
+Rincpop_q_y: Real population average monthly income,
+Rexppop_q_y: Real population average monthly expenses.
+
+Model Performance:
+R² (Coefficient of Determination): 0.50, indicating that 50% of the variance in the frequency of Operational Risk Losses is explained by the selected macroeconomic variables.
+Adjusted R²: 0.4211, accounting for the number of predictors, which suggests a moderate fit for the model.
+P-values for all selected macroeconomic variables are below the alpha threshold of 0.1, indicating that the variables are statistically significant.
+
+Hypothesis Testing:
+The Null Hypothesis (H₀: No relationship between macroeconomic variables and Operational Risk Losses) is rejected.
+The Alternative Hypothesis (H₁: Macroeconomic variables have relationships with Operational Risk Losses) is accepted.
+
+
+#### Checking Modelling Assumptions for Multiple Linear Regression Model
+
+```{r}
+# Multiple linear model construction
+model4 <- lm(Total_freq ~ rurkzt + Rincpop_q_y + 
+               Rexppop_q_y, data = freq_final_df)
+summary(model4)
+```
+
+#### Creating correlation matrix
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Visualization Kendall's correlation matrix by correlation plot
+col <- colorRampPalette(c("#BB4444", "#EE9988", "#FFFFFF", 
+                          "#77AADD", "#4477AA"))
+corrplot(kendall_corr2, method = "color", col = col(200),
+         type = "upper", order = "hclust",
+         addCoef.col = "black", 
+         tl.col = "black", tl.srt = 45,
+         
+)
+```
+
+
+#### Linearity Assumption
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Creating a scatterplot for each independent variable and the dependent variable
+ggplot(data = freq_final_df, aes(x = rurkzt, y = Total_freq)) +
+  geom_point() + 
+  stat_smooth(method = "lm", col = "red") +
+  labs(title = "Scatterplot of GDD_Trn_R_y vs. OR_Loss_in_assets", 
+       x = "GDD_Trn_R_y", y = "OR_Loss_in_assets") +
+  theme_minimal()
+```
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Creating a scatterplot for each independent variable and the dependent variable
+ggplot(data = freq_final_df, aes(x = Rincpop_q_y, y = Total_freq)) +
+  geom_point() + 
+  stat_smooth(method = "lm", col = "green") +
+  labs(title = "Scatterplot of GDD_Inf_R_y vs. OR_Loss_in_assets", 
+       x = "GDD_Inf_R_y", y = "OR_Loss_in_assets") +
+  theme_minimal()
+```
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Creating a scatterplot for each independent variable and the dependent variable
+ggplot(data = freq_final_df, aes(x = Rexppop_q_y, y = Total_freq)) +
+  geom_point() + 
+  stat_smooth(method = "lm", col = "blue") +
+  labs(title = "Scatterplot of Rincpop_q_y vs. OR_Loss_in_assets", 
+       x = "Rincpop_q_y", y = "OR_Loss_in_assets") +
+  theme_minimal()
+```
+
+**Findings:** It is difficult to confirm the presence of linear relationships between the independent and dependent variables. The linearity assumption assumes that the relationship between the predictors and the response variable is linear. If this assumption is violated, the model may fail to capture the true relationship, leading to biased or inefficient predictions. For Operational Risk forecasting, where relationships between macroeconomic factors and risk losses may be complex, ignoring non-linear relationships could result in inaccurate risk assessments. Stress testing that relies on linear models under these circumstances could lead to misleading conclusions about the potential impact/severity of Operational Risk Losses.
+
+
+#### Normality Assumption
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Calculating model residuals
+residuals <- resid(model4)
+
+# Creating a 1x2 grid of plots (histogram and Q-Q plot)
+par(mfrow = c(1, 2), mar = c(5, 4, 4, 2))
+
+# Histogram of residuals with adjusted bins and axis formatting
+hist(
+  residuals,
+  breaks = 5,  # Increase the number of bins
+  main = "Histogram of Residuals",
+  xlab = "Residual Value",
+  col = "lightblue",
+  border = "black",
+  xaxt = "n"
+)
+
+# Customize x-axis to remove scientific notation
+axis(1, at = pretty(residuals), labels = format(pretty(residuals), 
+                                                scientific = FALSE))
+
+# Q-Q plot of residuals
+qqnorm(residuals, main = "Normal Q-Q Plot")
+qqline(residuals, col = "red")
+
+# Reset plotting layout to default
+par(mfrow = c(1, 1))
+```
+
+**Findings:** The histogram of the residuals does not show gaps, confirming that the normality assumption is met for this model. The residuals in the Q-Q plot also confirm that the normality assumption is met, as the Q-Q plot forms an almost straight line.
+
+#### Constant Variance Assumption
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Calculating fitted values and residuals
+fitted_values <- fitted(model4)
+residuals <- resid(model4)
+
+# Creating a scatterplot of fitted values vs residuals
+plot(fitted_values, residuals, 
+     xlab = "Fitted Values", 
+     ylab = "Residuals", 
+     main = "Fitted Values vs Residuals", 
+     pch = 19, col = "blue")
+abline(h = 0, col = "red", lty = 2)
+```
+
+**Findings:** The fitted values of variance appear to be similarly distributed, confirming that the assumption is met.
+
+#### No Multicollinearity Assumption
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Checking for no multicollinearity assumption
+columns <- c('rurkzt', 'Rexppop_q_y', 'Rincpop_q_y', 'Total_freq')
+
+# Creating a pair plot for the selected columns
+ggpairs(freq_final_df[, columns])
+
+
+# Calculating VIF for the model
+vif_result <- vif(model4)
+
+# Converting the VIF results to a data frame
+df_vif <- data.frame(VIF = vif_result)
+df_vif
+```
+
+**Findings:** The Variance Inflation Factor (VIF) values are between 5 and 10, suggesting moderate multicollinearity among the independent variables. While this level of multicollinearity does not immediately compromise the model's results, it may indicate some redundancy between predictors. Moderate multicollinearity can inflate the standard errors of the coefficients, leading to less reliable statistical tests. It is important to monitor the impact of multicollinearity on the model, as it may affect the precision of the estimates and the interpretability of individual predictors.
+
+## Scenario Forecasting
+
+### Forecasting amounts (impact/severity) of Operational Risk Losses with Multiple Linear Regression Model
+
+#### Creating correlation matrix
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Visualization Kendall's correlation matrix by correlation plot
+col <- colorRampPalette(c("#BB4444", "#EE9988", "#FFFFFF", 
+                          "#77AADD", "#4477AA"))
+corrplot(kendall_corr1, method = "color", col = col(200),
+         type = "upper", order = "hclust",
+         addCoef.col = "black", 
+         tl.col = "black", tl.srt = 45,
+         
+)
+```
+**Findings:** All independent variables exhibit a negative correlation with the dependent variable. This suggests that as the values of the independent variables increase, the dependent variable tends to decrease, or vice versa. Negative correlations could indicate inverse relationships between the predictors and the outcome, which may offer insights into how different factors influence the operational risk losses. However, further investigation is required to confirm whether these relationships are statistically significant and to assess the strength of these correlations.
+
+#### Defining historical minimums and maximums of independent and dependent variables
+
+```{r}
+# Reviewing historical minimum values of "GDD_Trn_R_y" variable
+GDD_Trn_R_y_min <- min(final_df$GDD_Trn_R_y, na.rm = TRUE)
+cat("GDD_Trn_R_y historical minimum is", GDD_Trn_R_y_min)
+```
+```{r}
+# Reviewing historical maximum values of "GDD_Inf_R_y" variable
+GDD_Trn_R_y_max <- max(final_df$GDD_Trn_R_y, na.rm = TRUE)
+cat("GDD_Trn_R_y_max historical maximum is", GDD_Trn_R_y_max, "\n")
+```
+```{r}
+# Reviewing historical minimum values of "GDD_Trn_R_y" variable
+GDD_Inf_R_y_min <- min(final_df$GDD_Inf_R_y, na.rm = TRUE)
+cat("GDD_Inf_R_y historical minimum is", GDD_Inf_R_y_min)
+```
+```{r}
+# Reviewing historical maximum values of "GDD_Inf_R_y" variable
+GDD_Inf_R_y_max <- max(final_df$GDD_Inf_R_y, na.rm = TRUE)
+cat("GDD_Inf_R_y_max historical maximum is", GDD_Inf_R_y_max, "\n")
+```
+```{r}
+# Reviewing historical minimum values of "GDD_Trn_R_y" variable
+Rincpop_q_y_min <- min(final_df$Rincpop_q_y, na.rm = TRUE)
+cat("Rincpop_q_y historical minimum is", Rincpop_q_y_min)
+```
+```{r}
+# Reviewing historical maximum values of "GDD_Inf_R_y" variable
+Rincpop_q_y_max <- max(final_df$Rincpop_q_y, na.rm = TRUE)
+cat("Rincpop_q_y_max historical maximum is", Rincpop_q_y_max, "\n")
+```
+
+#### Defining Scenarios
+
+```{r}
+# Financial data on Total Assets for the following 3 quarters 2017 for forecasting
+total_assets_2017_Q1 <- 24161393163
+total_assets_2017_Q2 <- 24876764416
+total_assets_2017_Q3 <- 26113749910
+total_assets_2017_Q4 <- 27012467523
+```
+
+```{r}
+# Positive Scenario
+GDD_Trn_R_y_2017_Q1p <- 2.500
+GDD_Trn_R_y_2017_Q2p <- 2.800
+GDD_Trn_R_y_2017_Q3p <- 3.100
+GDD_Trn_R_y_2017_Q4p <- 3.500
+
+GDD_Inf_R_y_2017_Q1p <- 0.500
+GDD_Inf_R_y_2017_Q2p <- 0.800
+GDD_Inf_R_y_2017_Q3p <- 1.200
+GDD_Inf_R_y_2017_Q4p <- 1.500
+
+Rincpop_q_y_2017_Q1p <- 130.200
+Rincpop_q_y_2017_Q2p <- 130.500
+Rincpop_q_y_2017_Q3p <- 131.100
+Rincpop_q_y_2017_Q4p <- 132.600
+```
+
+```{r}
+# Negative Scenario
+GDD_Trn_R_y_2017_Q1n <- 1.500
+GDD_Trn_R_y_2017_Q2n <- 1.200
+GDD_Trn_R_y_2017_Q3n <- 1.000
+GDD_Trn_R_y_2017_Q4n <- 0.800
+
+GDD_Inf_R_y_2017_Q1n <- 0.100
+GDD_Inf_R_y_2017_Q2n <- 0.060
+GDD_Inf_R_y_2017_Q3n <- 0.020
+GDD_Inf_R_y_2017_Q4n <- -0.100
+
+Rincpop_q_y_2017_Q1n <- -20.000
+Rincpop_q_y_2017_Q2n <- -18.500
+Rincpop_q_y_2017_Q3n <- -16.000
+Rincpop_q_y_2017_Q4n <- -12.000
+```
+
+```{r}
+summary(mfl_model_or)
+```
+
+#### Positive scenario
+
+```{r}
+# Forecasting share of Operational Risk Losses in Total Assets (Positive scenario)
+intercept <- coef(mfl_model_or)["(Intercept)"]
+GDD_Trn_R_y_coef <- coef(mfl_model_or)["GDD_Trn_R_y"]
+GDD_Inf_R_y_coef <- coef(mfl_model_or)["GDD_Inf_R_y"]
+Rincpop_q_y_coef <- coef(mfl_model_or)["Rincpop_q_y"]
+
+# Positive Scenario
+GDD_Trn_R_y_2017_Q1p <- 2.500
+
+GDD_Inf_R_y_2017_Q1p <- 0.500
+
+Rincpop_q_y_2017_Q1p <- 130.200
+
+
+# Forecasting the share of Operational Risk Losses in Total Assets (Positive scenario)
+y_hat2017_Q1p <- intercept + GDD_Trn_R_y_coef * GDD_Trn_R_y_2017_Q1p + 
+  GDD_Inf_R_y_coef * GDD_Inf_R_y_2017_Q1p +
+  Rincpop_q_y_coef * Rincpop_q_y_2017_Q1p
+
+# Print the forecasted value
+cat("Forecasted share of Operational Risk Losses in Total Assets (Positive scenario) for Q1-2017:", 
+    y_hat2017_Q1p, "\n")
+
+```
+
+```{r}
+# Forecasting share of Operational Risk Losses in Total Assets (Positive scenario)
+intercept <- coef(mfl_model_or)["(Intercept)"]
+GDD_Trn_R_y_coef <- coef(mfl_model_or)["GDD_Trn_R_y"]
+GDD_Inf_R_y_coef <- coef(mfl_model_or)["GDD_Inf_R_y"]
+Rincpop_q_y_coef <- coef(mfl_model_or)["Rincpop_q_y"]
+
+# Positive Scenario
+# Positive Scenario
+GDD_Trn_R_y_2017_Q2p <- 2.800
+
+GDD_Inf_R_y_2017_Q2p <- 0.800
+
+Rincpop_q_y_2017_Q2p <- 130.500
+
+# Forecasting the share of Operational Risk Losses in Total Assets (Positive scenario)
+y_hat2017_Q2p <- intercept + GDD_Trn_R_y_coef * GDD_Trn_R_y_2017_Q2p + 
+  GDD_Inf_R_y_coef * GDD_Inf_R_y_2017_Q2p +
+  Rincpop_q_y_coef * Rincpop_q_y_2017_Q2p
+
+# Print the forecasted value
+cat("Forecasted share of Operational Risk Losses in Total Assets (Positive scenario) for Q2-2017:", 
+    y_hat2017_Q2p, "\n")
+```
+```{r}
+# Forecasting share of Operational Risk Losses in Total Assets (Positive scenario)
+intercept <- coef(mfl_model_or)["(Intercept)"]
+GDD_Trn_R_y_coef <- coef(mfl_model_or)["GDD_Trn_R_y"]
+GDD_Inf_R_y_coef <- coef(mfl_model_or)["GDD_Inf_R_y"]
+Rincpop_q_y_coef <- coef(mfl_model_or)["Rincpop_q_y"]
+
+# Positive Scenario
+GDD_Trn_R_y_2017_Q3p <- 3.100
+
+GDD_Inf_R_y_2017_Q3p <- 1.200
+
+Rincpop_q_y_2017_Q3p <- 131.100
+
+# Forecasting the share of Operational Risk Losses in Total Assets (Positive scenario)
+y_hat2017_Q3p <- intercept + GDD_Trn_R_y_coef * GDD_Trn_R_y_2017_Q3p + 
+  GDD_Inf_R_y_coef * GDD_Inf_R_y_2017_Q3p +
+  Rincpop_q_y_coef * Rincpop_q_y_2017_Q3p
+
+# Print the forecasted value
+cat("Forecasted share of Operational Risk Losses in Total Assets (Positive scenario) for Q3-2017:", 
+    y_hat2017_Q3p, "\n")
+
+```
+```{r}
+# Forecasting share of Operational Risk Losses in Total Assets (Positive scenario)
+intercept <- coef(mfl_model_or)["(Intercept)"]
+GDD_Trn_R_y_coef <- coef(mfl_model_or)["GDD_Trn_R_y"]
+GDD_Inf_R_y_coef <- coef(mfl_model_or)["GDD_Inf_R_y"]
+Rincpop_q_y_coef <- coef(mfl_model_or)["Rincpop_q_y"]
+
+# Positive Scenario
+GDD_Trn_R_y_2017_Q4p <- 3.500
+
+GDD_Inf_R_y_2017_Q4p <- 1.500
+
+Rincpop_q_y_2017_Q4p <- 132.600
+
+# Forecasting the share of Operational Risk Losses in Total Assets (Positive scenario)
+y_hat2017_Q4p <- intercept + GDD_Trn_R_y_coef * GDD_Trn_R_y_2017_Q4p + 
+  GDD_Inf_R_y_coef * GDD_Inf_R_y_2017_Q4p +
+  Rincpop_q_y_coef * Rincpop_q_y_2017_Q4p
+
+# Print the forecasted value
+cat("Forecasted share of Operational Risk Losses in Total Assets (Positive scenario) for Q4-2017:", 
+    y_hat2017_Q4p, "\n")
+
+```
+
+
+```{r}
+#Forecasting amount of Operational Risk Losses (Positive scenario)
+
+# Financial data on Total Assets for the following 3 quarters 2017 for forecasting
+total_assets_2017_Q1 <- 24161393163
+total_assets_2017_Q2 <- 24876764416
+total_assets_2017_Q3 <- 26113749910
+total_assets_2017_Q4 <- 27012467523
+
+
+
+# Forecasted share of Operational Risk Losses in Total Assets (Positive scenario) for Q1-2017:
+y_hat2017_Q1p
+y_hat2017_Q2p
+y_hat2017_Q3p
+y_hat2017_Q4p
+
+# Forecasting amount of Operational Risk Losses (Positive scenario)
+or_losses_2017_Q1p <- total_assets_2017_Q1 * y_hat2017_Q1p
+or_losses_2017_Q2p <- total_assets_2017_Q2 * y_hat2017_Q2p
+or_losses_2017_Q3p <- total_assets_2017_Q3 * y_hat2017_Q3p
+or_losses_2017_Q4p <- total_assets_2017_Q4 * y_hat2017_Q4p
+
+# Print the forecasted value
+cat("Forecasted amount of Operational Risk Losses (Positive scenario) for Q1-2017:", 
+    or_losses_2017_Q1p, "\n")
+
+cat("Forecasted amount of Operational Risk Losses (Positive scenario) for Q2-2017:", 
+    or_losses_2017_Q2p, "\n")
+
+cat("Forecasted amount of Operational Risk Losses (Positive scenario) for Q3-2017:", 
+    or_losses_2017_Q3p, "\n")
+
+cat("Forecasted amount of Operational Risk Losses (Positive scenario) for Q4-2017:", 
+    or_losses_2017_Q4p, "\n")
+```
+
+#### Negative scenario
+
+```{r}
+# Forecasting share of Operational Risk Losses in Total Assets (Negative scenario)
+intercept <- coef(mfl_model_or)["(Intercept)"]
+GDD_Trn_R_y_coef <- coef(mfl_model_or)["GDD_Trn_R_y"]
+GDD_Inf_R_y_coef <- coef(mfl_model_or)["GDD_Inf_R_y"]
+Rincpop_q_y_coef <- coef(mfl_model_or)["Rincpop_q_y"]
+
+# Negative Scenario
+GDD_Trn_R_y_2017_Q1n <- 1.500
+
+GDD_Inf_R_y_2017_Q1n <- 0.100
+
+Rincpop_q_y_2017_Q1n <- -20.000
+
+# Forecasting the share of Operational Risk Losses in Total Assets (Positive scenario)
+y_hat2017_Q1n <- intercept + GDD_Trn_R_y_coef * GDD_Trn_R_y_2017_Q1n + 
+  GDD_Inf_R_y_coef * GDD_Inf_R_y_2017_Q1n +
+  Rincpop_q_y_coef * Rincpop_q_y_2017_Q1n
+
+# Print the forecasted value
+cat("Forecasted share of Operational Risk Losses in Total Assets (Negative scenario) for Q1-2017:", 
+    y_hat2017_Q1n, "\n")
+
+```
+```{r}
+# Forecasting share of Operational Risk Losses in Total Assets (Negative scenario)
+intercept <- coef(mfl_model_or)["(Intercept)"]
+GDD_Trn_R_y_coef <- coef(mfl_model_or)["GDD_Trn_R_y"]
+GDD_Inf_R_y_coef <- coef(mfl_model_or)["GDD_Inf_R_y"]
+Rincpop_q_y_coef <- coef(mfl_model_or)["Rincpop_q_y"]
+
+# Negative Scenario
+GDD_Trn_R_y_2017_Q2n <- 1.200
+
+GDD_Inf_R_y_2017_Q2n <- 0.060
+
+Rincpop_q_y_2017_Q2n <- -18.500
+
+# Forecasting the share of Operational Risk Losses in Total Assets (Positive scenario)
+y_hat2017_Q2n <- intercept + GDD_Trn_R_y_coef * GDD_Trn_R_y_2017_Q2n + 
+  GDD_Inf_R_y_coef * GDD_Inf_R_y_2017_Q2n +
+  Rincpop_q_y_coef * Rincpop_q_y_2017_Q2n
+
+# Print the forecasted value
+cat("Forecasted share of Operational Risk Losses in Total Assets (Negative scenario) for Q2-2017:", 
+    y_hat2017_Q2n, "\n")
+
+```
+```{r}
+# Forecasting share of Operational Risk Losses in Total Assets (Negative scenario)
+intercept <- coef(mfl_model_or)["(Intercept)"]
+GDD_Trn_R_y_coef <- coef(mfl_model_or)["GDD_Trn_R_y"]
+GDD_Inf_R_y_coef <- coef(mfl_model_or)["GDD_Inf_R_y"]
+Rincpop_q_y_coef <- coef(mfl_model_or)["Rincpop_q_y"]
+
+# Negative Scenario
+GDD_Trn_R_y_2017_Q3n <- 1.000
+
+GDD_Inf_R_y_2017_Q3n <- 0.020
+
+Rincpop_q_y_2017_Q3n <- -16.000
+
+# Forecasting the share of Operational Risk Losses in Total Assets (Positive scenario)
+y_hat2017_Q3n <- intercept + GDD_Trn_R_y_coef * GDD_Trn_R_y_2017_Q3n + 
+  GDD_Inf_R_y_coef * GDD_Inf_R_y_2017_Q3n +
+  Rincpop_q_y_coef * Rincpop_q_y_2017_Q3n
+
+# Print the forecasted value
+cat("Forecasted share of Operational Risk Losses in Total Assets (Negative scenario) for Q3-2017:", 
+    y_hat2017_Q3n, "\n")
+```
+
+```{r}
+# Forecasting share of Operational Risk Losses in Total Assets (Negative scenario)
+intercept <- coef(mfl_model_or)["(Intercept)"]
+GDD_Trn_R_y_coef <- coef(mfl_model_or)["GDD_Trn_R_y"]
+GDD_Inf_R_y_coef <- coef(mfl_model_or)["GDD_Inf_R_y"]
+Rincpop_q_y_coef <- coef(mfl_model_or)["Rincpop_q_y"]
+
+# Negative Scenario
+GDD_Trn_R_y_2017_Q4n <- 0.800
+
+GDD_Inf_R_y_2017_Q4n <- -0.100
+
+Rincpop_q_y_2017_Q4n <- -12.000
+
+# Forecasting the share of Operational Risk Losses in Total Assets (Positive scenario)
+y_hat2017_Q4n <- intercept + GDD_Trn_R_y_coef * GDD_Trn_R_y_2017_Q4n + 
+  GDD_Inf_R_y_coef * GDD_Inf_R_y_2017_Q4n +
+  Rincpop_q_y_coef * Rincpop_q_y_2017_Q4n
+
+# Print the forecasted value
+cat("Forecasted share of Operational Risk Losses in Total Assets (Negative scenario) for Q4-2017:", 
+    y_hat2017_Q4n, "\n")
+```
+```{r}
+#Forecasting amount of Operational Risk Losses (Negative scenario)
+
+# Financial data on Total Assets for the following 3 quarters 2017 for forecasting
+total_assets_2017_Q1 <- 24161393163
+total_assets_2017_Q2 <- 24876764416
+total_assets_2017_Q3 <- 26113749910
+total_assets_2017_Q4 <- 27012467523
+
+
+# Forecasted share of Operational Risk Losses in Total Assets (Negative scenario) for Q1-2017:
+y_hat2017_Q1n
+y_hat2017_Q2n
+y_hat2017_Q3n
+y_hat2017_Q4n
+
+# Forecasting amount of Operational Risk Losses (Negative scenario)
+or_losses_2017_Q1n <- total_assets_2017_Q1 * y_hat2017_Q1n
+or_losses_2017_Q2n <- total_assets_2017_Q2 * y_hat2017_Q2n
+or_losses_2017_Q3n <- total_assets_2017_Q3 * y_hat2017_Q3n
+or_losses_2017_Q4n <- total_assets_2017_Q4 * y_hat2017_Q4n
+
+# Print the forecasted value
+cat("Forecasted amount of Operational Risk Losses (Negative scenario) for Q1-2017:", 
+    or_losses_2017_Q1n, "\n")
+
+cat("Forecasted amount of Operational Risk Losses (Negative scenario) for Q2-2017:", 
+    or_losses_2017_Q2n, "\n")
+
+cat("Forecasted amount of Operational Risk Losses (Negative scenario) for Q3-2017:", 
+    or_losses_2017_Q3n, "\n")
+
+cat("Forecasted amount of Operational Risk Losses (Negative scenario) for Q4-2017:", 
+    or_losses_2017_Q4n, "\n")
+```
+
+#### Amounts (impact/severity) of Operational Risk Losses forecasted values (Multiple Linear Regression):
+
+```{r}
+# Printing the forecasted values
+cat("Forecasted amount of Operational Risk Losses (Positive scenario) for Q1-2017:", 
+    or_losses_2017_Q1p, "\n")
+
+cat("Forecasted amount of Operational Risk Losses (Positive scenario) for Q2-2017:", 
+    or_losses_2017_Q2p, "\n")
+
+cat("Forecasted amount of Operational Risk Losses (Positive scenario) for Q3-2017:", 
+    or_losses_2017_Q3p, "\n")
+
+cat("Forecasted amount of Operational Risk Losses (Positive scenario) for Q4-2017:", 
+    or_losses_2017_Q4p, "\n")
+
+# Printing the forecasted values
+cat("Forecasted amount of Operational Risk Losses (Negative scenario) for Q1-2017:", 
+    or_losses_2017_Q1n, "\n")
+
+cat("Forecasted amount of Operational Risk Losses (Negative scenario) for Q2-2017:", 
+    or_losses_2017_Q2n, "\n")
+
+cat("Forecasted amount of Operational Risk Losses (Negative scenario) for Q3-2017:", 
+    or_losses_2017_Q3n, "\n")
+
+cat("Forecasted amount of Operational Risk Losses (Negative scenario) for Q4-2017:", 
+    or_losses_2017_Q4n, "\n")
+```
+
+
+### Forecasting frequency (number) of Operational Risk Losses
+
+#### Multiple Poisson Regression
+
+#### Creating correlation matrix
+
+```{r fig.align="center", fig.width=6, fig.height=4}
+# Visualization Kendall's correlation matrix by correlation plot
+col <- colorRampPalette(c("#BB4444", "#EE9988", "#FFFFFF", 
+                          "#77AADD", "#4477AA"))
+corrplot(kendall_corr2, method = "color", col = col(200),
+         type = "upper", order = "hclust",
+         addCoef.col = "black", 
+         tl.col = "black", tl.srt = 45,
+         
+)
+```
+**Findings:** All independent variables show a negative correlation with the dependent variable, indicating that as the values of the independent variables increase, the dependent variable tends to decrease, or vice versa. This inverse relationship may suggest that the operational risk losses decrease as certain macroeconomic factors improve. Further analysis is necessary to evaluate the strength and significance of these correlations, as well as to determine whether these relationships are causal or merely coincidental.
+
+#### Defining historical minimums and maximums of independent and dependent variables
+
+
+```{r}
+# Reviewing historical minimum values of "rurkzt" variable
+rurkzt_min <- min(final_df$rurkzt, na.rm = TRUE)
+cat("rurkzt historical minimum is", rurkzt_min)
+```
+```{r}
+# Reviewing historical maximum values of "rurkzt" variable
+rurkzt_max <- max(final_df$rurkzt, na.rm = TRUE)
+cat("rurkzt_max historical maximum is", rurkzt_max, "\n")
+```
+```{r}
+# Reviewing historical minimum values of "Rincpop_q_y" variable
+Rincpop_q_y_min <- min(final_df$Rincpop_q_y, na.rm = TRUE)
+cat("Rincpop_q_y historical minimum is", Rincpop_q_y_min)
+```
+```{r}
+# Reviewing historical maximum values of "Rincpop_q_y" variable
+Rincpop_q_y_max <- max(final_df$Rincpop_q_y, na.rm = TRUE)
+cat("Rincpop_q_y_max historical maximum is", Rincpop_q_y_max, "\n")
+```
+```{r}
+# Reviewing historical minimum values of "Rexppop_q_y" variable
+Rexppop_q_y_min <- min(final_df$Rexppop_q_y, na.rm = TRUE)
+cat("Rexppop_q_y historical minimum is", Rexppop_q_y_min)
+```
+```{r}
+# Reviewing historical maximum values of "Rexppop_q_y" variable
+Rexppop_q_y_max <- max(final_df$Rexppop_q_y, na.rm = TRUE)
+cat("Rexppop_q_y_max historical maximum is", Rexppop_q_y_max, "\n")
+```
+
+#### Defining Scenarios
+
+```{r}
+# Positive Scenario
+rurkzt_y_2017_Q1p <- 2.000
+rurkzt_y_2017_Q2p <- 3.500
+rurkzt_y_2017_Q3p <- 5.000
+rurkzt_y_2017_Q34 <- 6.500
+
+Rexppop_q_y_2017_Q1p = 50.000
+Rexppop_q_y_2017_Q2p = 55.000
+Rexppop_q_y_2017_Q3p = 60.000
+Rexppop_q_y_2017_Q4p = 65.000
+
+Rincpop_q_y_2017_Q1p = 5.000
+Rincpop_q_y_2017_Q2p = 6.500
+Rincpop_q_y_2017_Q3p = 8.000
+Rincpop_q_y_2017_Q4p = 9.500
+```
+
+```{r}
+# Negative Scenario
+rurkzt_y_2017_Q1n <- 18.000
+rurkzt_y_2017_Q2n <- 19.000
+rurkzt_y_2017_Q3n <- 19.500
+rurkzt_y_2017_Q4n <- 20.000
+
+Rexppop_q_y_2017_Q1n <- -5.800
+Rexppop_q_y_2017_Q2n <- -5.400
+Rexppop_q_y_2017_Q3n <- -4.900
+Rexppop_q_y_2017_Q4n <- -4.900
+
+Rincpop_q_y_2017_Q1n <- -5.000
+Rincpop_q_y_2017_Q2n <- -3.000
+Rincpop_q_y_2017_Q3n <- 0.000
+Rincpop_q_y_2017_Q4n <- 1.000
+```
+
+```{r}
+summary(mf_poiss_model)
+```
+
+#### Positive scenario
+
+```{r}
+# Forecasting of frequency (number) of Operational Risk Losses (Positive scenario)
+intercept <- coef(mf_poiss_model)["(Intercept)"]
+rurkzt_coef <- coef(mf_poiss_model)["rurkzt"]
+Rincpop_q_y_coef <- coef(mf_poiss_model)["Rincpop_q_y"]
+Rexppop_q_y_coef <- coef(mf_poiss_model)["Rexppop_q_y"]
+
+# Positive Scenario
+rurkzt_y_2017_Q1p <- 2.000
+
+Rexppop_q_y_2017_Q1p = 50.000
+
+Rincpop_q_y_2017_Q1p = 5.000
+
+# Forecasting of frequency (number) of Operational Risk Losses (Positive scenario)
+y_hat2017_freq_Q1p <- (intercept + rurkzt_y_2017_Q1p * rurkzt_coef +
+  Rexppop_q_y_2017_Q1p *Rexppop_q_y_coef +
+  Rincpop_q_y_coef * Rincpop_q_y_2017_Q1p)
+
+# Predicting the count (y) by taking the exponential function
+predicted_count2017_Q1p <- exp(y_hat2017_freq_Q1p)
+
+# Print the forecasted value
+cat("Forecasted frequency (number) of Operational Risk Losses (Positive scenario) for Q1-2017:", predicted_count2017_Q1p, "\n")
+
+```
+```{r}
+# Forecasting of frequency (number) of Operational Risk Losses (Positive scenario)
+intercept <- coef(mf_poiss_model)["(Intercept)"]
+rurkzt_coef <- coef(mf_poiss_model)["rurkzt"]
+Rincpop_q_y_coef <- coef(mf_poiss_model)["Rincpop_q_y"]
+Rexppop_q_y_coef <- coef(mf_poiss_model)["Rexppop_q_y"]
+
+# Positive Scenario
+rurkzt_y_2017_Q2p <- 3.500
+
+Rexppop_q_y_2017_Q2p = 55.000
+
+Rincpop_q_y_2017_Q2p = 6.500
+
+# Forecasting of frequency (number) of Operational Risk Losses (Positive scenario)
+y_hat2017_freq_Q2p <- (intercept + rurkzt_y_2017_Q2p * rurkzt_coef + 
+                         Rexppop_q_y_2017_Q2p * Rexppop_q_y_coef + 
+                         Rincpop_q_y_coef * Rincpop_q_y_2017_Q2p)
+
+# Predicting the count (y) by taking the exponential function
+predicted_count2017_Q2p <- exp(y_hat2017_freq_Q2p)
+
+# Print the forecasted value
+cat("Forecasted frequency (number) of Operational Risk Losses (Positive scenario) for Q2-2017:", predicted_count2017_Q2p, "\n")
+
+```
+```{r}
+# Forecasting of frequency (number) of Operational Risk Losses (Positive scenario)
+intercept <- coef(mf_poiss_model)["(Intercept)"]
+rurkzt_coef <- coef(mf_poiss_model)["rurkzt"]
+Rincpop_q_y_coef <- coef(mf_poiss_model)["Rincpop_q_y"]
+Rexppop_q_y_coef <- coef(mf_poiss_model)["Rexppop_q_y"]
+
+# Positive Scenario
+rurkzt_y_2017_Q3p <- 5.000
+
+Rexppop_q_y_2017_Q3p = 60.000
+
+Rincpop_q_y_2017_Q3p = 8.000
+
+# Forecasting of frequency (number) of Operational Risk Losses (Positive scenario)
+y_hat2017_freq_Q3p <- (intercept + rurkzt_y_2017_Q3p * rurkzt_coef + 
+                         Rexppop_q_y_2017_Q3p * Rexppop_q_y_coef + 
+                         Rincpop_q_y_coef * Rincpop_q_y_2017_Q3p)
+
+# Predicting the count (y) by taking the exponential function
+predicted_count2017_Q3p <- exp(y_hat2017_freq_Q3p)
+
+# Print the forecasted value
+cat("Forecasted frequency (number) of Operational Risk Losses (Positive scenario) for Q3-2017:", predicted_count2017_Q3p, "\n")
+```
+
+```{r}
+# Forecasting of frequency (number) of Operational Risk Losses (Positive scenario)
+intercept <- coef(mf_poiss_model)["(Intercept)"]
+rurkzt_coef <- coef(mf_poiss_model)["rurkzt"]
+Rincpop_q_y_coef <- coef(mf_poiss_model)["Rincpop_q_y"]
+Rexppop_q_y_coef <- coef(mf_poiss_model)["Rexppop_q_y"]
+
+# Positive Scenario
+rurkzt_y_2017_Q4p <- 6.500
+
+Rexppop_q_y_2017_Q4p = 65.000
+
+Rincpop_q_y_2017_Q4p = 9.500
+
+# Forecasting of frequency (number) of Operational Risk Losses (Positive scenario)
+y_hat2017_freq_Q4p <- (intercept + rurkzt_y_2017_Q4p * rurkzt_coef + 
+                         Rexppop_q_y_2017_Q4p * Rexppop_q_y_coef + 
+                         Rincpop_q_y_coef * Rincpop_q_y_2017_Q4p)
+
+# Predicting the count (y) by taking the exponential function
+predicted_count2017_Q4p <- exp(y_hat2017_freq_Q4p)
+
+# Print the forecasted value
+cat("Forecasted frequency (number) of Operational Risk Losses (Positive scenario) for Q4-2017:", predicted_count2017_Q4p, "\n")
+```
+
+#### Negaive scenario
+
+```{r}
+# Forecasting of frequency (number) of Operational Risk Losses (Negative scenario)
+intercept <- coef(mf_poiss_model)["(Intercept)"]
+rurkzt_coef <- coef(mf_poiss_model)["rurkzt"]
+Rincpop_q_y_coef <- coef(mf_poiss_model)["Rincpop_q_y"]
+Rexppop_q_y_coef <- coef(mf_poiss_model)["Rexppop_q_y"]
+
+# Negative Scenario
+rurkzt_y_2017_Q1n <- 18.000
+
+Rexppop_q_y_2017_Q1n <- -5.800
+
+Rincpop_q_y_2017_Q1n <- -5.000
+
+# Forecasting of frequency (number) of Operational Risk Losses (Negative scenario)
+y_hat2017_freq_Q1n <- (intercept + rurkzt_y_2017_Q1n * rurkzt_coef + 
+                         Rexppop_q_y_2017_Q1n * Rexppop_q_y_coef + 
+                         Rincpop_q_y_2017_Q1n * Rincpop_q_y_coef)
+
+# Predicting the count (y) by taking the exponential function
+predicted_count2017_Q1n <- exp(y_hat2017_freq_Q1n)
+
+# Print the forecasted value
+cat("Forecasted frequency (number) of Operational Risk Losses (Negative scenario) for Q1-2017:", predicted_count2017_Q1n, "\n")
+```
+```{r}
+# Forecasting of frequency (number) of Operational Risk Losses (Negative scenario)
+intercept <- coef(mf_poiss_model)["(Intercept)"]
+rurkzt_coef <- coef(mf_poiss_model)["rurkzt"]
+Rincpop_q_y_coef <- coef(mf_poiss_model)["Rincpop_q_y"]
+Rexppop_q_y_coef <- coef(mf_poiss_model)["Rexppop_q_y"]
+
+# Negative Scenario
+rurkzt_y_2017_Q2n <- 19.000
+
+Rexppop_q_y_2017_Q2n <- -5.400
+
+Rincpop_q_y_2017_Q2n <- -3.000
+
+# Forecasting of frequency (number) of Operational Risk Losses (Negative scenario)
+y_hat2017_freq_Q2n <- (intercept + rurkzt_y_2017_Q2n * rurkzt_coef + 
+                         Rexppop_q_y_2017_Q2n * Rexppop_q_y_coef + 
+                         Rincpop_q_y_2017_Q2n * Rincpop_q_y_coef)
+
+# Predicting the count (y) by taking the exponential function
+predicted_count2017_Q2n <- exp(y_hat2017_freq_Q2n)
+
+# Print the forecasted value
+cat("Forecasted frequency (number) of Operational Risk Losses (Negative scenario) for Q2-2017:", predicted_count2017_Q2n, "\n")
+```
+```{r}
+# Forecasting of frequency (number) of Operational Risk Losses (Negative scenario)
+intercept <- coef(mf_poiss_model)["(Intercept)"]
+rurkzt_coef <- coef(mf_poiss_model)["rurkzt"]
+Rincpop_q_y_coef <- coef(mf_poiss_model)["Rincpop_q_y"]
+Rexppop_q_y_coef <- coef(mf_poiss_model)["Rexppop_q_y"]
+
+# Negative Scenario
+rurkzt_y_2017_Q3n <- 19.500
+
+Rexppop_q_y_2017_Q3n <- -4.900
+
+Rincpop_q_y_2017_Q3n <- 0.000
+
+# Forecasting of frequency (number) of Operational Risk Losses (Negative scenario)
+y_hat2017_freq_Q3n <- (intercept + rurkzt_y_2017_Q3n * rurkzt_coef + 
+                         Rexppop_q_y_2017_Q3n * Rexppop_q_y_coef + 
+                         Rincpop_q_y_2017_Q3n * Rincpop_q_y_coef)
+
+# Predicting the count (y) by taking the exponential function
+predicted_count2017_Q3n <- exp(y_hat2017_freq_Q3n)
+
+# Print the forecasted value
+cat("Forecasted frequency (number) of Operational Risk Losses (Negative scenario) for Q3-2017:", predicted_count2017_Q3n, "\n")
+```
+```{r}
+# Forecasting of frequency (number) of Operational Risk Losses (Negative scenario)
+intercept <- coef(mf_poiss_model)["(Intercept)"]
+rurkzt_coef <- coef(mf_poiss_model)["rurkzt"]
+Rincpop_q_y_coef <- coef(mf_poiss_model)["Rincpop_q_y"]
+Rexppop_q_y_coef <- coef(mf_poiss_model)["Rexppop_q_y"]
+
+# Negative Scenario
+rurkzt_y_2017_Q4n <- 20.000
+
+Rexppop_q_y_2017_Q4n <- -4.900
+
+Rincpop_q_y_2017_Q4n <- 1.000
+
+# Forecasting of frequency (number) of Operational Risk Losses (Negative scenario)
+y_hat2017_freq_Q4n <- (intercept + rurkzt_y_2017_Q4n * rurkzt_coef + 
+                         Rexppop_q_y_2017_Q4n * Rexppop_q_y_coef + 
+                         Rincpop_q_y_2017_Q4n * Rincpop_q_y_coef)
+
+# Predicting the count (y) by taking the exponential function
+predicted_count2017_Q4n <- exp(y_hat2017_freq_Q4n)
+
+# Print the forecasted value
+cat("Forecasted frequency (number) of Operational Risk Losses (Negative scenario) for Q4-2017:", predicted_count2017_Q4n, "\n")
+```
+
+#### Frequency (number) of Operational Risks forecasted values (Multiple Poisson Regression):
+
+```{r}
+# Print the forecasted value
+cat("Forecasted amount of Operational Risk Losse (Positive scenario) for Q1-2017:", 
+    predicted_count2017_Q1p, "\n")
+
+cat("Forecasted amount of Operational Risk Losse (Positive scenario) for Q2-2017:", 
+    predicted_count2017_Q2p, "\n")
+
+cat("Forecasted amount of Operational Risk Losse (Positive scenario) for Q3-2017:", 
+    predicted_count2017_Q3p, "\n")
+
+cat("Forecasted amount of Operational Risk Losse (Positive scenario) for Q4-2017:", 
+    predicted_count2017_Q4p, "\n")
+
+# Print the forecasted value
+cat("Forecasted amount of Operational Risk Losse (Negative scenario) for Q1-2017:", 
+    predicted_count2017_Q1n, "\n")
+
+cat("Forecasted amount of Operational Risk Losse (Negative scenario) for Q2-2017:", 
+    predicted_count2017_Q2n, "\n")
+
+cat("Forecasted amount of Operational Risk Losse (Negative scenario) for Q3-2017:", 
+    predicted_count2017_Q3n, "\n")
+
+cat("Forecasted amount of Operational Risk Losse (Negative scenario) for Q4-2017:", 
+    predicted_count2017_Q4n, "\n")
+```
+
+#### Multiple Linear Regression
+
+```{r}
+summary(model4)
+```
+
+#### Positive scenario
+```{r}
+# Forecasting of frequency (number) of Operational Risk Losses (Positive scenario)
+intercept <- coef(model4)["(Intercept)"]
+rurkzt_coef <- coef(model4)["rurkzt"]
+Rincpop_q_y_coef <- coef(model4)["Rincpop_q_y"]
+Rexppop_q_y_coef <- coef(model4)["Rexppop_q_y"]
+
+# Positive Scenario
+rurkzt_y_2017_Q1p <- 2.000
+
+Rexppop_q_y_2017_Q1p = 50.000
+
+Rincpop_q_y_2017_Q1p = 5.000
+
+# Forecasting of frequency (number) of Operational Risk Losses (Positive scenario)
+y_hat2017_freq_Q1p <- (intercept + rurkzt_y_2017_Q1p * rurkzt_coef +
+  Rexppop_q_y_2017_Q1p *Rexppop_q_y_coef +
+  Rincpop_q_y_coef * Rincpop_q_y_2017_Q1p)
+
+# Print the forecasted value
+cat("Forecasted frequency (number) of Operational Risk Losses (Positive scenario) for Q1-2017:", 
+    y_hat2017_freq_Q1p, "\n")
+
+```
+```{r}
+# Forecasting of frequency (number) of Operational Risk Losses (Positive scenario)
+intercept <- coef(model4)["(Intercept)"]
+rurkzt_coef <- coef(model4)["rurkzt"]
+Rincpop_q_y_coef <- coef(model4)["Rincpop_q_y"]
+Rexppop_q_y_coef <- coef(model4)["Rexppop_q_y"]
+
+# Positive Scenario
+rurkzt_y_2017_Q2p <- 3.500
+
+Rexppop_q_y_2017_Q2p = 55.000
+
+Rincpop_q_y_2017_Q2p = 6.500
+
+# Forecasting of frequency (number) of Operational Risk Losses (Positive scenario)
+y_hat2017_freq_Q2p <- (intercept + rurkzt_y_2017_Q2p * rurkzt_coef + 
+                         Rexppop_q_y_2017_Q2p * Rexppop_q_y_coef + 
+                         Rincpop_q_y_coef * Rincpop_q_y_2017_Q2p)
+
+# Print the forecasted value
+cat("Forecasted frequency (number) of Operational Risk Losses (Positive scenario) for Q2-2017:", 
+    y_hat2017_freq_Q2p, "\n")
+
+```
+```{r}
+# Forecasting of frequency (number) of Operational Risk Losses (Positive scenario)
+intercept <- coef(model4)["(Intercept)"]
+rurkzt_coef <- coef(model4)["rurkzt"]
+Rincpop_q_y_coef <- coef(model4)["Rincpop_q_y"]
+Rexppop_q_y_coef <- coef(model4)["Rexppop_q_y"]
+
+# Positive Scenario
+rurkzt_y_2017_Q3p <- 5.000
+
+Rexppop_q_y_2017_Q3p = 60.000
+
+Rincpop_q_y_2017_Q3p = 8.000
+
+# Forecasting of frequency (number) of Operational Risk Losses (Positive scenario)
+y_hat2017_freq_Q3p <- (intercept + rurkzt_y_2017_Q3p * rurkzt_coef + 
+                         Rexppop_q_y_2017_Q3p * Rexppop_q_y_coef + 
+                         Rincpop_q_y_coef * Rincpop_q_y_2017_Q3p)
+
+# Print the forecasted value
+cat("Forecasted frequency (number) of Operational Risk Losses (Positive scenario) for Q3-2017:", 
+    y_hat2017_freq_Q3p, "\n")
+```
+
+```{r}
+# Forecasting of frequency (number) of Operational Risk Losses (Positive scenario)
+intercept <- coef(model4)["(Intercept)"]
+rurkzt_coef <- coef(model4)["rurkzt"]
+Rincpop_q_y_coef <- coef(model4)["Rincpop_q_y"]
+Rexppop_q_y_coef <- coef(model4)["Rexppop_q_y"]
+
+# Positive Scenario
+rurkzt_y_2017_Q4p <- 6.500
+
+Rexppop_q_y_2017_Q4p = 65.000
+
+Rincpop_q_y_2017_Q4p = 9.500
+
+# Forecasting of frequency (number) of Operational Risk Losses (Positive scenario)
+y_hat2017_freq_Q4p <- (intercept + rurkzt_y_2017_Q4p * rurkzt_coef + 
+                         Rexppop_q_y_2017_Q4p * Rexppop_q_y_coef + 
+                         Rincpop_q_y_coef * Rincpop_q_y_2017_Q4p)
+
+# Print the forecasted value
+cat("Forecasted frequency (number) of Operational Risk Losses (Positive scenario) for Q4-2017:", 
+    y_hat2017_freq_Q4p, "\n")
+```
+
+#### Negaive scenario
+
+```{r}
+# Forecasting of frequency (number) of Operational Risk Losses (Negative scenario)
+intercept <- coef(model4)["(Intercept)"]
+rurkzt_coef <- coef(model4)["rurkzt"]
+Rincpop_q_y_coef <- coef(model4)["Rincpop_q_y"]
+Rexppop_q_y_coef <- coef(model4)["Rexppop_q_y"]
+
+# Negative Scenario
+rurkzt_2017_Q1n <- 18.000
+
+Rexppop_q_y_2017_Q1n <- -5.800
+
+Rincpop_q_y_2017_Q1n <- -5.000
+
+# Forecasting of frequency (number) of Operational Risk Losses (Negative scenario)
+y_hat2017_freq_Q1n <- (intercept + rurkzt_2017_Q1n * rurkzt_coef + 
+                         Rexppop_q_y_2017_Q1n * Rexppop_q_y_coef + 
+                         Rincpop_q_y_2017_Q1n * Rincpop_q_y_coef)
+
+# Print the forecasted value
+cat("Forecasted frequency (number) of Operational Risk Losses (Negative scenario) for Q1-2017:", 
+    y_hat2017_freq_Q1n, "\n")
+```
+```{r}
+# Forecasting of frequency (number) of Operational Risk Losses (Negative scenario)
+intercept <- coef(model4)["(Intercept)"]
+rurkzt_coef <- coef(model4)["rurkzt"]
+Rincpop_q_y_coef <- coef(model4)["Rincpop_q_y"]
+Rexppop_q_y_coef <- coef(model4)["Rexppop_q_y"]
+
+# Negative Scenario
+rurkzt_y_2017_Q2n <- 19.000
+
+Rexppop_q_y_2017_Q2n <- -5.400
+
+Rincpop_q_y_2017_Q2n <- -3.000
+
+# Forecasting of frequency (number) of Operational Risk Losses (Negative scenario)
+y_hat2017_freq_Q2n <- (intercept + rurkzt_y_2017_Q2n * rurkzt_coef + 
+                         Rexppop_q_y_2017_Q2n * Rexppop_q_y_coef + 
+                         Rincpop_q_y_2017_Q2n * Rincpop_q_y_coef)
+
+# Print the forecasted value
+cat("Forecasted frequency (number) of Operational Risk Losses (Negative scenario) for Q2-2017:", 
+    y_hat2017_freq_Q2n, "\n")
+```
+```{r}
+# Forecasting of frequency (number) of Operational Risk Losses (Negative scenario)
+intercept <- coef(model4)["(Intercept)"]
+rurkzt_coef <- coef(model4)["rurkzt"]
+Rincpop_q_y_coef <- coef(model4)["Rincpop_q_y"]
+Rexppop_q_y_coef <- coef(model4)["Rexppop_q_y"]
+
+# Negative Scenario
+rurkzt_y_2017_Q3n <- 19.500
+
+Rexppop_q_y_2017_Q3n <- -4.900
+
+Rincpop_q_y_2017_Q3n <- 0.000
+
+# Forecasting of frequency (number) of Operational Risk Losses (Negative scenario)
+y_hat2017_freq_Q3n <- (intercept + rurkzt_y_2017_Q3n * rurkzt_coef + 
+                         Rexppop_q_y_2017_Q3n * Rexppop_q_y_coef + 
+                         Rincpop_q_y_2017_Q3n * Rincpop_q_y_coef)
+
+# Print the forecasted value
+cat("Forecasted frequency (number) of Operational Risk Losses (Negative scenario) for Q3-2017:", 
+    y_hat2017_freq_Q3n, "\n")
+```
+```{r}
+# Forecasting of frequency (number) of Operational Risk Losses (Negative scenario)
+intercept <- coef(model4)["(Intercept)"]
+rurkzt_coef <- coef(model4)["rurkzt"]
+Rincpop_q_y_coef <- coef(model4)["Rincpop_q_y"]
+Rexppop_q_y_coef <- coef(model4)["Rexppop_q_y"]
+
+# Negative Scenario
+rurkzt_y_2017_Q4n <- 20.000
+
+Rexppop_q_y_2017_Q4n <- -4.900
+
+Rincpop_q_y_2017_Q4n <- 1.000
+
+# Forecasting of frequency (number) of Operational Risk Losses (Negative scenario)
+y_hat2017_freq_Q4n <- (intercept + rurkzt_y_2017_Q4n * rurkzt_coef + 
+                         Rexppop_q_y_2017_Q4n * Rexppop_q_y_coef + 
+                         Rincpop_q_y_2017_Q4n * Rincpop_q_y_coef)
+
+# Print the forecasted value
+cat("Forecasted frequency (number) of Operational Risk Losses (Negative scenario) for Q4-2017:", 
+    y_hat2017_freq_Q4n, "\n")
+```
+
+#### Frequency (number) of Operational Risks forecasted values (Multiple Linear Regression):
+
+```{r}
+# Print the forecasted value
+cat("Forecasted amount of Operational Risk Losse (Positive scenario) for Q1-2017:", 
+    y_hat2017_freq_Q1p, "\n")
+
+cat("Forecasted amount of Operational Risk Losse (Positive scenario) for Q2-2017:", 
+    y_hat2017_freq_Q2p, "\n")
+
+cat("Forecasted amount of Operational Risk Losse (Positive scenario) for Q3-2017:", 
+    y_hat2017_freq_Q3p, "\n")
+
+cat("Forecasted amount of Operational Risk Losse (Positive scenario) for Q4-2017:", 
+    y_hat2017_freq_Q4p, "\n")
+
+# Print the forecasted value
+cat("Forecasted amount of Operational Risk Losse (Negative scenario) for Q1-2017:", 
+    y_hat2017_freq_Q3n, "\n")
+
+cat("Forecasted amount of Operational Risk Losse (Negative scenario) for Q2-2017:", 
+    y_hat2017_freq_Q2n, "\n")
+
+cat("Forecasted amount of Operational Risk Losse (Negative scenario) for Q3-2017:", 
+    y_hat2017_freq_Q3n, "\n")
+
+cat("Forecasted amount of Operational Risk Losse (Negative scenario) for Q4-2017:", 
+    y_hat2017_freq_Q4n, "\n")
+```
+
+### STRESS TESTING SUMMARY TABLE:
+
+```{r}
+# Creating the summary data frame for the stress testing results with hierarchical and unique row names
+stresstest_summary <- data.frame(
+  `Operational Risk Loss Amount (Linear)` = c(NA, 25639727, 25594428, 26034185, 25334607, 
+                                              NA, 68726841, 71313585, 74798770, 76779811),
+  `Operational Risk Frequency (Poisson)` = c(NA, 453, 478, 504, 531, 
+                                             NA, 186, 185, 184, 182),
+  `Operational Risk Frequency (Linear)` = c(NA, 357, 367, 377, 387, 
+                                            NA, 201, 200, 201, 183),
+  row.names = c("Positive scenario", "2017 Q1 - Positive", "2017 Q2 - Positive", 
+                "2017 Q3 - Positive", "2017 Q4 - Positive", 
+                "Negative scenario", "2017 Q1 - Negative", "2017 Q2 - Negative", 
+                "2017 Q3 - Negative", "2017 Q4 - Negative")
+)
+
+# Display the data frame
+print(stresstest_summary)
+
+
+```
+
+## CONCLUSION:
+Stress testing of Operational Risks, using Multiple Linear Regression to predict the amount (impact/severity) of losses, and Multiple Poisson Regression and Multiple Negative Binomial Regression to predict the frequency (number) of losses, indicates that the Multiple Poisson Regression models provide reasonable results for predicting the frequency of losses. The results from Multiple Negative Binomial Regression closely resemble those of the Multiple Poisson Regression models.
+
+For statistical tests, the threshold for R² (Coefficient of Determination) was set at 0.35 (35%), and an alpha level of 0.1 (90% confidence) was adopted.
+
+The best model for predicting the amounts (impact/severity) of Operational Risk losses was selected using the following independent variables (regressors) from the "AFR" R package dataset:
+
+GDD_Trn_R_y: Real Gross Value Added for Transportation,
+GDD_Inf_R_y: Real Gross Value Added for Information,
+Rincpop_q_y: Real Population Average Monthly Income.
+The dependent variable was the share (portion) of Total Operational Risk Losses in the assets of bank "X". The R² of this model was 0.44 (44%).
+The best model for predicting the frequency (number) of Operational Risk losses was selected for both Multiple Poisson Regression and Multiple Linear Regression, using the following independent variables (regressors):
+
+ruktzt: RUB/KZT exchange rate,
+Rincpop_q_y: Real Population Average Monthly Income,
+Rexppop_q_y: Real Population Average Monthly Expenses.
+The dependent variable was the total frequency (number) of Operational Risk losses for bank "X". The R² values are as follows:
+Multiple Poisson Regression: Pseudo R² = 0.48 (r2ML, r2CU)
+Multiple Linear Regression: R² = 0.50
+Correlation analysis showed a negative correlation between independent and dependent variables across all models. The models predicted the following outputs:
+
+Multiple Linear Regression (Amount of Operational Risk Losses):
+
+Positive scenario: Worst loss amount is KZT 26,034,185,
+Negative scenario: Worst loss amount is KZT 76,779,811.
+
+Multiple Poisson Regression (Frequency of Operational Risk Losses):
+Positive scenario: Worst frequency is 531,
+Negative scenario: Worst frequency is 186.
+
+Multiple Linear Regression (Frequency of Operational Risk Losses):
+Positive scenario: Worst frequency is 387,
+Negative scenario: Worst frequency is 185.
+
+The results of Stress Testing should be interpreted with caution, as some modeling assumptions, such as Linearity and Normality, are not fully satisfied.
