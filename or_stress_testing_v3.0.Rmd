@@ -1,7 +1,7 @@
 ---
 title: "Statistical Modelling of Operational Risk Stress-Testing with 2 Modelling Approaches: Regression Model and Historical Simulation Model using R Programming Language (version 3.0)"
 author: "Imir Osmanov"
-date: "2025-03-16"
+date: "`r Sys.Date()`"
 output:
   pdf_document:
     latex_engine: xelatex
@@ -21,6 +21,8 @@ output:
     toc: yes
     toc_depth: 3
     fig_caption: yes
+geometry: a4paper, left=0.5in, right=0.5in, top=0.5in, bottom=0.5in
+fontsize: 10pt
 header-includes:
   - \usepackage{booktabs}
   - \usepackage{xcolor}
@@ -34,9 +36,8 @@ header-includes:
   - \postauthor{\par\end{center}\vspace{1em}}
   - \predate{\begin{center}\large}
   - \postdate{\par\end{center}\vspace{2em}\newpage}
-  - \let\oldtableofcontents\tableofcontents
-  - \renewcommand{\tableofcontents}{\oldtableofcontents\newpage}
 ---
+
 
 
 
@@ -286,9 +287,7 @@ library(ggpubr)
 library(mgcv)
 library(knitr)
 library(kableExtra)
-library(dplyr)
 library(extraDistr)
-library(readxl)
 library(fitdistrplus)
 library(nortest)
 ```
@@ -6976,13 +6975,13 @@ head(combined_or_loss)
 tail(combined_or_loss)
 ```
 #### Calculation Kendall's correlation
-```{r}
+```{r fig.align="center", fig.width=6, fig.height=4}
 # Calculating Kendall's correlation matrix
 kendall_corr <- cor(combined_or_loss, method = "kendall", 
                     use = "complete.obs")
 print(kendall_corr)
 ```
-```{r}
+```{r fig.align="center", fig.width=6, fig.height=4}
 # Visualization Kendall's correlation matrix by correlation plot
 col <- colorRampPalette(c("#BB4444", "#EE9988", "#FFFFFF", 
                           "#77AADD", "#4477AA"))
@@ -7732,7 +7731,7 @@ BIC).
 ```{r}
 # Creating the summary data frame for the best-fit distributions
 best_fit_summary <- data.frame(
-  `Operational Risk Type` = c("Type 1", "Best Fit: Weibull", 
+  `OR Type` = c("Type 1", "Best Fit: Weibull", 
                               "Type 2", "Best Fit: Weibull", 
                               "Type 3", "Best Fit: Log-Normal", 
                               "Type 4", "Best Fit: Log-Normal"),
